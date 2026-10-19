@@ -7,7 +7,7 @@ Web app to play AI-ICE, the trading card game. React + TypeScript (Vite).
 - `src/game/effects.ts` — card abilities (on entrance, activated, continuous, deleted, fight hooks). Decisions go through `s.choices`.
 - `src/game/bot.ts` / `sim.ts` — computer opponent (easy / normal) and bot-vs-bot balance simulator (`SIM=1 npx vitest run src/game/sim.test.ts`).
 - `src/game/decks.ts` — deck storage (browser localStorage), deck rules (HOUSE RULE), share codes.
-- `src/net/` — online matches (host-authoritative protocol in the browsers). Messages go through a small relay: `netlify/functions/relay.mts` + Netlify Database (`netlify/database/migrations/`). Netlify provisions the database and applies migrations on deploy; `netlify dev` runs it locally.
+- `src/net/` — online matches (host-authoritative protocol in the browsers). Messages go through a small relay: `netlify/functions/relay.mts` + a Neon Postgres database. Set `DATABASE_URL` (Neon connection string) in Netlify's environment variables; the function creates its tables on first use (`SCHEMA` in `src/net/relayServer.ts`).
 - `src/ui/` — the table (vs bot, hot-seat, online), deck builder, library, lobby.
 
 ```sh

@@ -1,4 +1,4 @@
-// Online two-player matches: room protocol on top of a Transport (Supabase Realtime broadcast, or in memory for tests).
+// Online two-player matches: room protocol on top of a Transport (the Netlify Database relay, or in memory for tests).
 //
 // The host is authoritative. It creates the room, starts the match when a guest says hello (seed, decks, names, seats),
 // and is the only one who orders actions: every action goes to the host, which checks it (legal for reduce and sent by
@@ -14,9 +14,9 @@
 import { validateDeck } from '../game/decks'
 import { newGame, reduce, type Action, type GameState, type PlayerIdx } from '../game/engine'
 import { whoMustAct, type MatchSetup, type NetLink, type SeatKind } from '../game/driver'
-import { supabaseTransport, type Transport } from './transport'
+import { netlifyTransport, type Transport } from './transport'
 
-export { memoryHub, memoryTransportPair, onlineAvailable, supabaseTransport, type MemoryHub, type Transport } from './transport'
+export { memoryHub, memoryTransportPair, onlineAvailable, netlifyTransport, type MemoryHub, type Transport } from './transport'
 
 /** Everything needed to rebuild the match from scratch: newGame(room) + replay of the history. */
 export interface Room {
@@ -193,7 +193,7 @@ export function refuse(s: GameState, a: Action, seat: PlayerIdx): string | null 
 export interface MatchOptions {
   name: string
   deck: string[]
-  /** default: supabaseTransport(code, clientId()) */
+  /** default: netlifyTransport(code, clientId()) */
   transport?: Transport
   storage?: KV | null
   random?: () => number
@@ -205,7 +205,7 @@ export interface MatchOptions {
 export function createRoom(opts: MatchOptions & { code?: string }): Match {
   const storage = opts.storage === undefined ? defaultStorage() : opts.storage
   const code = opts.code ?? newRoomCode(opts.random)
-  const t = opts.transport ?? supabaseTransport(code, clientId(storage))
+  const t = opts.transport ?? netlifyTransport(code, clientId(storage))
   return run({ v: 1, role: 'host', code, clientId: t.id, name: opts.name, deck: opts.deck, room: null, history: [] }, t, storage, opts)
 }
 
@@ -213,7 +213,7 @@ export function createRoom(opts: MatchOptions & { code?: string }): Match {
 export function joinRoom(opts: MatchOptions & { code: string }): Match {
   const storage = opts.storage === undefined ? defaultStorage() : opts.storage
   const code = normalizeCode(opts.code) ?? opts.code
-  const t = opts.transport ?? supabaseTransport(code, clientId(storage))
+  const t = opts.transport ?? netlifyTransport(code, clientId(storage))
   return run({ v: 1, role: 'guest', code, clientId: t.id, name: opts.name, deck: opts.deck, room: null, history: [] }, t, storage, opts)
 }
 
@@ -222,7 +222,7 @@ export function resumeRoom(opts: { storage?: KV | null; connect?: (code: string,
   const storage = opts.storage === undefined ? defaultStorage() : opts.storage
   const saved = loadSaved(storage)
   if (!saved) return null
-  const t = (opts.connect ?? supabaseTransport)(saved.code, saved.clientId)
+  const t = (opts.connect ?? netlifyTransport)(saved.code, saved.clientId)
   return run(saved, t, storage, { ...opts, name: saved.name, deck: saved.deck })
 }
 

@@ -1,8 +1,8 @@
 // How messages travel between the two clients of a room. The match protocol (match.ts) only needs this interface,
-// so it runs the same over Supabase Realtime (the real thing) and over an in-memory hub (tests).
+// so it runs the same over the Netlify Database relay (the real thing) and over an in-memory hub (tests).
 
-import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
 import type { NetMsg } from './match'
+import type { RelayPoll } from './relayServer'
 
 export interface Transport {
   /** this client's id (also its presence key) */
@@ -30,81 +30,89 @@ function listeners<T extends unknown[]>() {
   }
 }
 
-// ---------- Supabase Realtime ----------
+// ---------- Netlify Database relay ----------
 
-const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+/** Online play needs the relay function, which only exists on the deployed site (and `netlify dev`),
+ *  not in the single-file test build. */
+export const onlineAvailable = import.meta.env.MODE !== 'single'
 
-/** false when the Supabase env vars are missing: online play is hidden behind a notice. */
-export const onlineAvailable = !!(URL && KEY)
-
-let client: Promise<SupabaseClient> | null = null
-/** Loaded and created on first use, so the app works (and stays smaller) without config. */
-function supabase(): Promise<SupabaseClient> {
-  return (client ??= import('@supabase/supabase-js').then(({ createClient }) =>
-    createClient(URL!, KEY!, { auth: { persistSession: false, autoRefreshToken: false } }),
-  ))
+export interface RelayOptions {
+  base?: string
+  fetch?: typeof fetch
+  /** poll interval while the tab is visible */
+  pollMs?: number
 }
 
-/** Broadcast channel `aiice:<code>` with presence keyed by client id. Public channel: no tables, no RLS. */
-export function supabaseTransport(code: string, id: string): Transport {
+/** Polls the relay function (src/net/relayServer.ts) for the room's messages; sends are POSTed in order. */
+export function netlifyTransport(code: string, id: string, opts: RelayOptions = {}): Transport {
+  const base = opts.base ?? '/api/relay'
+  const http = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a))
+  const pollMs = opts.pollMs ?? 1000
   const msgs = listeners<[NetMsg]>()
   const pres = listeners<[]>()
   const queue: NetMsg[] = []
-  let ch: RealtimeChannel | null = null
-  let joined = false
-  let closed = false
+  let after = -1
+  let up = false
   let present: string[] = []
+  let closed = false
+  let sending = false
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const netUp = () => typeof navigator === 'undefined' || navigator.onLine !== false
-  const flush = () => {
-    while (joined && ch && queue.length) void ch.send({ type: 'broadcast', event: 'msg', payload: queue.shift() })
+  const setUp = (v: boolean, peers = present) => {
+    const changed = v !== up || peers.join() !== present.join()
+    up = v
+    present = peers
+    if (changed) pres.emit()
   }
-  const onNet = () => pres.emit()
-  if (typeof window !== 'undefined') {
-    window.addEventListener('online', onNet)
-    window.addEventListener('offline', onNet)
+  const flush = async () => {
+    if (sending) return
+    sending = true
+    try {
+      while (!closed && queue.length) {
+        const res = await http(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, from: id, msg: queue[0] }) })
+        if (!res.ok) throw new Error(`relay ${res.status}`)
+        queue.shift()
+      }
+    } catch {
+      setUp(false)
+    } finally {
+      sending = false
+    }
   }
-
-  supabase()
-    .then((sb) => {
+  const poll = async () => {
+    if (closed) return
+    try {
+      const res = await http(`${base}?code=${encodeURIComponent(code)}&id=${encodeURIComponent(id)}&after=${after}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`relay ${res.status}`)
+      const r = (await res.json()) as RelayPoll
       if (closed) return
-      const c = (ch = sb.channel(`aiice:${code}`, { config: { broadcast: { self: false, ack: false }, presence: { key: id } } }))
-      c.on('broadcast', { event: 'msg' }, ({ payload }) => msgs.emit(payload as NetMsg))
-        .on('presence', { event: 'sync' }, () => {
-          present = Object.keys(c.presenceState())
-          pres.emit()
-        })
-        // called again with SUBSCRIBED after every automatic rejoin
-        .subscribe((status) => {
-          joined = status === 'SUBSCRIBED'
-          if (joined) {
-            void c.track({ id, at: Date.now() })
-            flush()
-          } else present = []
-          pres.emit()
-        })
-    })
-    .catch(() => pres.emit())
+      after = r.last
+      setUp(true, r.peers)
+      for (const m of r.messages) msgs.emit(m.body as NetMsg)
+      if (queue.length) void flush()
+    } catch {
+      if (!closed) setUp(false, [])
+    }
+    // poll slower while the tab is hidden, so an idle open tab costs little database time
+    const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+    if (!closed) timer = setTimeout(poll, hidden ? pollMs * 5 : pollMs)
+  }
+  void poll()
 
   return {
     id,
     send(msg) {
       queue.push(msg)
-      flush()
+      if (up) void flush()
     },
     onMessage: msgs.add,
-    online: () => joined && netUp(),
-    peers: () => (joined && netUp() ? [...new Set([id, ...present])] : []),
+    online: () => up,
+    peers: () => (up ? [...new Set([id, ...present])] : []),
     onPresence: pres.add,
     close() {
       closed = true
-      joined = false
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('online', onNet)
-        window.removeEventListener('offline', onNet)
-      }
-      if (ch) void supabase().then((sb) => sb.removeChannel(ch!))
+      clearTimeout(timer)
+      setUp(false, [])
     },
   }
 }

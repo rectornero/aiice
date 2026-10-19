@@ -136,7 +136,7 @@ export function Lobby({ decks, onStart, onBack }: { decks: LobbyDeck[]; onStart:
         </button>
       </div>
 
-      {!onlineAvailable && <p className="lobby-note">Online play turns on once the game server is connected.</p>}
+      {!onlineAvailable && <p className="lobby-note">Online play works on the deployed site (Netlify), not in this test page.</p>}
 
       {match ? (
         <div className="panel lobby-room">

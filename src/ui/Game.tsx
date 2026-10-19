@@ -53,6 +53,21 @@ export function Game({ initial, onExit }: { initial: GameState; onExit: () => vo
     )
   }
 
+  // Fight step: tapping one of your ready Entities arms it; tapping an enemy Entity then attacks it.
+  const fighting = s.phase === 'fight' && s.active === me && !s.pendingFight
+  const armed = fighting && sel?.kind === 'story' ? s.players[me].stories.find((st) => st.id === sel.storyId && !canAttack(s, st)) : undefined
+  const glow = (st: Story, owner: PlayerIdx): Glow => {
+    if (!fighting) return undefined
+    if (owner === me) return canAttack(s, st) ? undefined : 'ready'
+    return armed ? 'target' : undefined
+  }
+  const clickStory = (st: Story, owner: PlayerIdx) => {
+    if (owner === foe && armed) {
+      act({ t: 'attack', storyId: armed.id, target: st.id })
+      setSel(null)
+    } else setSel({ kind: 'story', storyId: st.id })
+  }
+
   const selected = (() => {
     if (!sel) return null
     if (sel.kind === 'hand') {
@@ -66,11 +81,22 @@ export function Game({ initial, onExit }: { initial: GameState; onExit: () => vo
   return (
     <div className="game">
       <div className="board">
-        <PlayerArea s={s} p={foe} mine={false} sel={sel} setSel={setSel} openPile={(kind) => setModal({ kind, player: foe })} />
+        <PlayerArea s={s} p={foe} mine={false} sel={sel} glow={glow} clickStory={clickStory} openPile={(kind) => setModal({ kind, player: foe })} />
         <div className="midbar">
           <div className="turninfo">
             <b>Turn {s.turn}</b> · {s.players[s.active].name}'s turn · <span className="phase">{s.phase === 'main' ? 'Main step' : 'Fight step'}</span>
           </div>
+          {fighting && (
+            <div className="fight-hint">
+              {armed ? (
+                s.players[foe].stories.length > 0 ? <>Tap an enemy Entity to attack it with <b>{card(top(armed)).name}</b></> : (
+                  <button className="btn danger" onClick={() => { act({ t: 'attack', storyId: armed.id, target: 'player' }); setSel(null) }}>
+                    ⚔ Attack {s.players[foe].name} directly
+                  </button>
+                )
+              ) : s.players[me].stories.some((st) => !canAttack(s, st)) ? 'Tap a glowing Entity to attack with it' : 'No Entity can attack right now'}
+            </div>
+          )}
           <div className="row gap">
             {s.active === me && s.phase === 'main' && <button className="btn" onClick={() => act({ t: 'toFight' })}>Go to Fight ⚔</button>}
             {s.active === me && !s.pendingFight && (
@@ -79,7 +105,7 @@ export function Game({ initial, onExit }: { initial: GameState; onExit: () => vo
             <button className="btn ghost" onClick={onExit}>Leave</button>
           </div>
         </div>
-        <PlayerArea s={s} p={me} mine sel={sel} setSel={setSel} openPile={(kind) => setModal({ kind, player: me })} />
+        <PlayerArea s={s} p={me} mine sel={sel} glow={glow} clickStory={clickStory} openPile={(kind) => setModal({ kind, player: me })} />
         <div className="hand">
           {s.players[me].thoughts.map((c) => {
             const playable = s.active === me && s.phase === 'main' && (canStart(s, me, c) || s.players[me].stories.some((st) => canContinue(s, me, c, st)))
@@ -126,8 +152,13 @@ export function Game({ initial, onExit }: { initial: GameState; onExit: () => vo
   )
 }
 
-function PlayerArea({ s, p, mine, sel, setSel, openPile }: {
-  s: GameState; p: PlayerIdx; mine: boolean; sel: Sel; setSel: (x: Sel) => void; openPile: (k: 'memories' | 'discard') => void
+type Glow = 'ready' | 'target' | undefined
+
+function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile }: {
+  s: GameState; p: PlayerIdx; mine: boolean; sel: Sel
+  glow: (st: Story, owner: PlayerIdx) => Glow
+  clickStory: (st: Story, owner: PlayerIdx) => void
+  openPile: (k: 'memories' | 'discard') => void
 }) {
   const pl = s.players[p]
   return (
@@ -146,7 +177,7 @@ function PlayerArea({ s, p, mine, sel, setSel, openPile }: {
           <CardBack label="Discard" count={pl.discard.length} onClick={() => openPile('discard')} />
         </div>
         <div className="stories">
-          {pl.stories.map((st) => <StoryView key={st.id} s={s} st={st} selected={sel?.kind === 'story' && sel.storyId === st.id} onClick={() => setSel({ kind: 'story', storyId: st.id })} />)}
+          {pl.stories.map((st) => <StoryView key={st.id} s={s} st={st} glow={glow(st, p)} selected={sel?.kind === 'story' && sel.storyId === st.id} onClick={() => clickStory(st, p)} />)}
           {Array.from({ length: 5 - pl.stories.length }, (_, i) => <div key={i} className="slot">Story</div>)}
         </div>
       </div>
@@ -154,14 +185,14 @@ function PlayerArea({ s, p, mine, sel, setSel, openPile }: {
   )
 }
 
-function StoryView({ s, st, selected, onClick }: { s: GameState; st: Story; selected: boolean; onClick: () => void }) {
+function StoryView({ s, st, glow, selected, onClick }: { s: GameState; st: Story; glow: Glow; selected: boolean; onClick: () => void }) {
   const t = top(st)
   const m = modsOf(s, t.uid)
   const bonus = m.bonus + m.turnBonus
   const spent = s.usesSpent[t.uid] ?? 0
   const uses = card(t).uses
   return (
-    <div className="story">
+    <div className={`story ${glow ?? ''}`}>
       {st.cards.length > 1 && <div className="story-depth">{st.cards.slice(0, -1).map((c) => <span key={c.uid}>Ch{card(c).chapter}</span>)}</div>}
       <CardView card={card(t)} size="sm" selected={selected} onClick={onClick}
         dim={st.attackedTurn === s.turn}

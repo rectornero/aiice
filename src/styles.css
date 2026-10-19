@@ -142,3 +142,11 @@ input, select { background: var(--bg2); color: var(--text); border: 1px solid va
   .lib-body { flex-direction: column-reverse; }
   .lib-body .side { width: 100%; }
 }
+
+/* fight step highlights */
+.fight-hint { color: var(--orange); font-weight: 600; flex: 1; text-align: center; }
+.story.ready .card { box-shadow: 0 0 0 2px var(--orange), 0 0 14px var(--orange); animation: pulse 1.4s ease-in-out infinite; }
+.story.ready .card.selected { box-shadow: 0 0 0 3px #fff, 0 0 18px var(--orange); animation: none; }
+.story.target .card { box-shadow: 0 0 0 2px var(--danger), 0 0 14px var(--danger); cursor: crosshair; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 2px var(--orange), 0 0 4px var(--orange); } }
+@media (prefers-reduced-motion: reduce) { .story.ready .card { animation: none; } }

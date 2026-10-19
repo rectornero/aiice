@@ -384,6 +384,12 @@ export function reduce(prev: GameState, a: Action): GameState {
 /** Drops picks that left their zone from the current choice, and skips choices with nothing left to pick. */
 function settle(s: GameState) {
   if (s.winner !== null) s.choices = []
+  // A fighter's whole Story left the field before the fight resolved (e.g. Luna went with a forgotten card): no fight.
+  const f = s.pendingFight
+  if (f && (!findStory(s, f.attacker.storyId) || !findStory(s, f.defender.storyId))) {
+    s.pendingFight = null
+    log(s, 'A fighter left the field: the fight is called off.')
+  }
   while (s.choices.length) {
     const ch = s.choices[0]
     const zone = ch.zone === 'field' ? null : s.players[ch.player][ch.zone]

@@ -4,7 +4,11 @@ Web app to play AI-ICE, the trading card game. React + TypeScript (Vite).
 
 - `src/game/cards.ts` — card database (first set, SOFA). Fight values and Fate stars are provisional.
 - `src/game/engine.ts` — rules engine: a pure, seeded reducer `(state, action) → state`, so a match can be replayed or synced online from its seed and action list. Choices the rulebook leaves open are marked `HOUSE RULE`.
-- `src/ui/` — the table (hot-seat, 2 players on one device) and the card library.
+- `src/game/effects.ts` — card abilities (on entrance, activated, continuous, deleted, fight hooks). Decisions go through `s.choices`.
+- `src/game/bot.ts` / `sim.ts` — computer opponent (easy / normal) and bot-vs-bot balance simulator (`SIM=1 npx vitest run src/game/sim.test.ts`).
+- `src/game/decks.ts` — deck storage (browser localStorage), deck rules (HOUSE RULE), share codes.
+- `src/net/` — online matches over Supabase Realtime broadcast (host-authoritative). Needs `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` at build time; no tables needed. Without them the app runs offline only.
+- `src/ui/` — the table (vs bot, hot-seat, online), deck builder, library, lobby.
 
 ```sh
 npm install

@@ -322,10 +322,10 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
       if (p === f.attacker.player) {
         yield { t: 'chooseMode', player: p, mode: attackEV(s, { p, st: aSt }, { p: f.defender.player, st: dSt }).mode }
       } else {
-        // the attacker already chose: answer it with the mode that maximizes our gain
+        // the attacker's choice is hidden: assume it picked what our own attack model would pick, then answer that
         const vA = storyValue(s, f.attacker.player, aSt)
         const vD = storyValue(s, p, dSt)
-        const am = f.modes[f.attacker.player] ?? 'sure'
+        const am = attackEV(s, { p: f.attacker.player, st: aSt }, { p, st: dSt }).mode
         const da = sideDist(s, f.attacker.player, topOf(aSt), am)
         const score = (md: FightMode) => {
           const o = odds(da, sideDist(s, p, topOf(dSt), md))

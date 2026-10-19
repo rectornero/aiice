@@ -11,6 +11,7 @@
 // from the seed), so a modified client could peek at hidden cards. Fine for friendly playtests; a server-side referee
 // that keeps the seed secret and sends each player only what they may see would fix it later.
 
+import { validateDeck } from '../game/decks'
 import { newGame, reduce, type Action, type GameState, type PlayerIdx } from '../game/engine'
 import { whoMustAct, type MatchSetup, type NetLink, type SeatKind } from '../game/driver'
 import { supabaseTransport, type Transport } from './transport'
@@ -297,7 +298,7 @@ function run(saved: Saved, t: Transport, storage: KV | null, opts: MatchOptions)
     if (m.from === me) return
     if (m.k === 'hello') {
       if (!room) {
-        if (typeof m.name !== 'string' || !Array.isArray(m.deck) || !m.deck.length || m.deck.some((c) => typeof c !== 'string')) return
+        if (typeof m.name !== 'string' || !Array.isArray(m.deck) || !m.deck.length || m.deck.some((c) => typeof c !== 'string') || !validateDeck(m.deck).ok) return
         const hostSeat: PlayerIdx = random() < 0.5 ? 0 : 1
         const guestName = m.name.trim().slice(0, 24) || 'Guest'
         const hostName = saved.name.trim().slice(0, 24) || 'Host'

@@ -7,8 +7,9 @@ export function countText(ch: PendingChoice) {
   return ch.min === ch.max ? `Choose exactly ${ch.min}` : `Choose ${ch.min}–${ch.max}`
 }
 
-/** With nothing picked (when that's allowed), confirming means skipping. */
-const confirmLabel = (picks: string[]) => (picks.length ? 'Confirm' : 'Skip')
+/** With nothing picked when that's allowed, confirming means skipping; otherwise say how many are still needed. */
+const confirmLabel = (ch: PendingChoice, picks: string[]) =>
+  picks.length >= ch.min ? (picks.length ? 'Confirm' : 'Skip') : `Choose ${ch.min - picks.length} more`
 
 export const picksValid = (ch: PendingChoice, picks: string[]) => picks.length >= ch.min && picks.length <= ch.max
 
@@ -25,7 +26,7 @@ export function ChoiceBar({ ch, picks, onConfirm, onShowCards }: {
       </div>
       <div className="row gap">
         {onShowCards && <button className="btn sm" onClick={onShowCards}>Show cards</button>}
-        <button className="btn primary sm" disabled={!picksValid(ch, picks)} onClick={onConfirm}>{confirmLabel(picks)}</button>
+        <button className="btn primary sm" disabled={!picksValid(ch, picks)} onClick={onConfirm}>{confirmLabel(ch, picks)}</button>
       </div>
     </div>
   )
@@ -53,7 +54,7 @@ export function ChoiceModal({ s, ch, picks, toggle, onConfirm, onHide }: {
           ))}
           {opts.length === 0 && <div className="muted">No matching cards.</div>}
         </div>
-        <button className="btn primary" disabled={!picksValid(ch, picks)} onClick={onConfirm}>{confirmLabel(picks)}</button>
+        <button className="btn primary" disabled={!picksValid(ch, picks)} onClick={onConfirm}>{confirmLabel(ch, picks)}</button>
       </div>
     </div>
   )

@@ -479,3 +479,17 @@ function pickAction(s: GameState, i: number): Action {
   }
   return { t: 'endTurn' }
 }
+
+describe('review fixes', () => {
+  it('a pending fight whose Entity left the field is called off (no crash)', () => {
+    // A's Luna attacks; before the modes are chosen, B forgets an Entity from Thoughts and Luna goes too
+    let s = table({ field: [['SOFA-M05'], ['SOFA-M03']], hand: [[], ['SOFA-001']] })
+    s.phase = 'fight'
+    s = reduce(s, { t: 'attack', storyId: storyOf(s, on(s, 'SOFA-M05')).id, target: storyOf(s, on(s, 'SOFA-M03')).id })
+    expect(s.pendingFight).not.toBeNull()
+    s = reduce(s, { t: 'forget', player: 1, uid: inHand(s, 'SOFA-001', 1) })
+    expect(s.players[0].stories).toHaveLength(0)
+    expect(s.pendingFight).toBeNull()
+    expect(reduce(s, { t: 'endTurn' }).turn).toBe(s.turn + 1)
+  })
+})

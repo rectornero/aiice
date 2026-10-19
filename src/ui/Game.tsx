@@ -117,7 +117,7 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
   const myMove = canAct && !ch && !s.pendingFight && s.active === me
 
   return (
-    <div className="game">
+    <div className={`game ${selected ? 'sheet-open' : ''}`}>
       <div className="board">
         <PlayerArea s={s} p={foe} mine={false} sel={sel} glow={glow} clickStory={clickStory} openPile={(kind) => setModal({ kind, player: foe })} />
         <div className="midbar">

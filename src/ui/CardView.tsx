@@ -18,7 +18,7 @@ export function Stars({ n }: { n: number }) {
 
 interface Props {
   card: Card
-  size?: 'sm' | 'md'
+  size?: 'xs' | 'sm' | 'md'
   selected?: boolean
   dim?: boolean
   onClick?: () => void

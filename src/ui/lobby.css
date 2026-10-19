@@ -1,0 +1,13 @@
+/* online lobby (uses the tokens from styles.css) */
+.lobby h1 { font-size: 24px; letter-spacing: 1px; }
+.lobby-note { margin: 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+.lobby-field { display: flex; flex-direction: column; gap: 4px; }
+.lobby-field input, .lobby-field select { width: 100%; }
+.lobby-or { text-align: center; }
+.lobby form { margin: 0; }
+.lobby-code-input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: 3px; font-weight: 700; }
+.lobby-code-input::placeholder { letter-spacing: normal; font-weight: 400; text-transform: none; }
+.lobby-room { align-items: center; text-align: center; }
+.lobby-room p { margin: 0; }
+.lobby-code { font-size: clamp(40px, 15vw, 64px); font-weight: 800; letter-spacing: .18em; padding-left: .18em; color: var(--accent); font-variant-numeric: tabular-nums; user-select: all; -webkit-user-select: all; line-height: 1.1; }
+.lobby-status { font-weight: 600; }

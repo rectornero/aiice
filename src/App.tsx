@@ -1,28 +1,38 @@
 import { useState } from 'react'
 import { STARTER_DECKS } from './game/cards'
+import type { BotPolicy, MatchSetup, SeatKind } from './game/driver'
 import { newGame, type GameState } from './game/engine'
 import { Game } from './ui/Game'
 import { Library } from './ui/Library'
 
-type Screen = { kind: 'menu' } | { kind: 'game'; state: GameState } | { kind: 'library' }
+type Screen = { kind: 'menu' } | { kind: 'game'; setup: MatchSetup } | { kind: 'library' }
+
+/** PLACEHOLDER until src/game/bot.ts lands (integrator: replace with the real BotPolicy).
+ *  Answers choices with the first options, takes the sure hit, and ends its turn. */
+const placeholderBotPolicy: BotPolicy = (s, p) => {
+  const ch = s.choices[0]
+  if (ch) return ch.player === p ? { t: 'choose', player: p, picks: ch.options.slice(0, ch.min) } : null
+  if (s.pendingFight) return { t: 'chooseMode', player: p, mode: 'sure' }
+  return s.active === p ? { t: 'endTurn' } : null
+}
 
 export function App() {
   const [screen, setScreen] = useState<Screen>({ kind: 'menu' })
   const [names, setNames] = useState<[string, string]>(['Player 1', 'Player 2'])
   const [decks, setDecks] = useState<[string, string]>(['music', 'fate'])
 
-  if (screen.kind === 'game') return <Game initial={screen.state} onExit={() => setScreen({ kind: 'menu' })} />
+  if (screen.kind === 'game') return <Game setup={screen.setup} onExit={() => setScreen({ kind: 'menu' })} />
   if (screen.kind === 'library') return <Library onBack={() => setScreen({ kind: 'menu' })} />
 
-  const start = () =>
-    setScreen({
-      kind: 'game',
-      state: newGame({
-        seed: Math.floor(Math.random() * 2 ** 31),
-        decks: [STARTER_DECKS[decks[0]].cards, STARTER_DECKS[decks[1]].cards],
-        names,
-      }),
+  const start = (vsBot: boolean) => {
+    const initial: GameState = newGame({
+      seed: Math.floor(Math.random() * 2 ** 31),
+      decks: [STARTER_DECKS[decks[0]].cards, STARTER_DECKS[decks[1]].cards],
+      names: vsBot ? [names[0], 'Bot'] : names,
     })
+    const seats: [SeatKind, SeatKind] = vsBot ? ['local', 'bot'] : ['local', 'local']
+    setScreen({ kind: 'game', setup: { initial, seats, bot: vsBot ? placeholderBotPolicy : undefined } })
+  }
 
   return (
     <div className="menu">
@@ -38,7 +48,8 @@ export function App() {
             </select>
           </div>
         ))}
-        <button className="btn primary big" onClick={start}>Start match</button>
+        <button className="btn primary big" onClick={() => start(false)}>Start match</button>
+        <button className="btn" onClick={() => start(true)}>Play vs bot (Player 2 deck)</button>
         <p className="muted small">Two players share the screen; a curtain hides each hand when you pass the device.</p>
       </div>
       <div className="row gap">

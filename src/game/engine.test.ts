@@ -45,6 +45,8 @@ describe('engine', () => {
     s = reduce(s, { t: 'endTurn' })
     const d = putInHand(s, 'SOFA-024') // sure 1
     s = reduce(s, { t: 'imagineNew', uid: d })
+    expect(s.choices[0]?.effect).toBe('trait') // Raiden's [B]: ill-fated → ~2 opponent's Entities
+    s = reduce(s, { t: 'choose', player: 1, picks: [] })
     s = reduce(s, { t: 'endTurn' })
     s = reduce(s, { t: 'toFight' })
     s = reduce(s, { t: 'attack', storyId: s.players[0].stories[0].id, target: s.players[1].stories[0].id })

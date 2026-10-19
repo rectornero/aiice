@@ -8,8 +8,12 @@
 // - When s.choices is non-empty, the game waits for choices[0].player to send { t: 'choose', picks }.
 //   Every other action is rejected meanwhile, except 'concede' and 'clearLastFight'.
 // - Activated (orange ◆) abilities are used with { t: 'activate', uid }; check canActivate first.
+// - A choice's options are uids in its zone: 'field' = imagined Entities (either side), 'memories' / 'thoughts' =
+//   cards in choices[0].player's own pile (show them to that player). Pick between min and max of them.
+// - bonusDetails / traitDetails say where a value comes from; UNDELETABLE is the "can't be deleted" trait.
 
 import { CARD_BY_ID, cardName, type Card } from './cards'
+import { activate, afterFight, computeField, destroy, enter, forgotten, resolveChoice, storedTraits, type FieldEntity } from './effects'
 
 export type PlayerIdx = 0 | 1
 export type FightMode = 'sure' | 'flip'
@@ -22,7 +26,12 @@ export const RULES = {
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
   noAttackOnStartTurn: true,
+  /** HOUSE RULE: death-defiant = "when it would be deleted, its owner loses 1 Essence instead" (Kurogane's text). */
+  deathDefiant: true,
 }
+
+/** Stored trait for "can't be deleted" (Hikari Mizuki). */
+export const UNDELETABLE = 'undeletable'
 
 export interface CardInst {
   uid: string
@@ -156,7 +165,7 @@ export type Action =
 
 // ---------- helpers ----------
 
-function rand(s: GameState): number {
+export function rand(s: GameState): number {
   // mulberry32: deterministic, so a match can be replayed or synced from its seed and actions
   let t = (s.rng = (s.rng + 0x6d2b79f5) | 0)
   t = Math.imul(t ^ (t >>> 15), t | 1)
@@ -164,7 +173,7 @@ function rand(s: GameState): number {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296
 }
 
-function shuffle<T>(s: GameState, arr: T[]) {
+export function shuffle<T>(s: GameState, arr: T[]) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(rand(s) * (i + 1))
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
@@ -179,14 +188,25 @@ export function modsOf(s: GameState, uid: string): Mods {
   return s.mods[uid] ?? { bonus: 0, turnBonus: 0, traits: [] }
 }
 
-/** All traits an Entity has right now: given by effects or tools, plus continuous effects. */
-export function traitsOf(s: GameState, uid: string): string[] {
-  return [...new Set(modsOf(s, uid).traits.map((t) => t.name))]
+// The layered field view is cached per state object. States being built by reduce are never cached.
+const fieldCache = new WeakMap<GameState, Map<string, FieldEntity>>()
+const building = new WeakSet<GameState>()
+
+function fieldOf(s: GameState): Map<string, FieldEntity> {
+  if (building.has(s)) return computeField(s)
+  let f = fieldCache.get(s)
+  if (!f) fieldCache.set(s, (f = computeField(s)))
+  return f
 }
 
-/** Traits with their source and duration, for the UI. */
+/** All traits an Entity has right now: given by effects or tools, plus continuous effects. */
+export function traitsOf(s: GameState, uid: string): string[] {
+  return traitDetails(s, uid).map((t) => t.name)
+}
+
+/** Traits with their source and duration, for the UI (one entry per trait name). */
 export function traitDetails(s: GameState, uid: string): TraitInfo[] {
-  return modsOf(s, uid).traits.map((t) => ({ name: t.name, source: 'effect', untilTurn: t.oneTurn ? s.turn : t.untilTurn }))
+  return fieldOf(s).get(uid)?.traits ?? storedTraits(s, uid)
 }
 
 export function hasTrait(s: GameState, uid: string, name: string) {
@@ -195,8 +215,14 @@ export function hasTrait(s: GameState, uid: string, name: string) {
 
 /** Total +N/−N on an Entity right now (permanent, this turn, and continuous effects). */
 export function powerBonus(s: GameState, uid: string): number {
+  const b = bonusDetails(s, uid)
+  return b.permanent + b.turn + b.continuous
+}
+
+/** powerBonus split by where it comes from, for the UI. */
+export function bonusDetails(s: GameState, uid: string): { permanent: number; turn: number; continuous: number } {
   const m = modsOf(s, uid)
-  return m.bonus + m.turnBonus
+  return { permanent: m.bonus, turn: m.turnBonus, continuous: fieldOf(s).get(uid)?.bonus ?? 0 }
 }
 
 /** The Entity's sure hit, before bonuses. */
@@ -260,7 +286,7 @@ export function canStart(s: GameState, p: PlayerIdx, c: CardInst): boolean {
   return s.active === p && k.type === 'Entity' && s.players[p].stories.length < RULES.maxStories && (!RULES.storiesStartAtChapter1 || k.chapter === 1)
 }
 
-function log(s: GameState, msg: string) {
+export function log(s: GameState, msg: string) {
   s.log = [...s.log.slice(-199), msg]
 }
 
@@ -274,7 +300,7 @@ function drawOne(s: GameState, p: PlayerIdx) {
   pl.thoughts.push(c)
 }
 
-function loseEssence(s: GameState, p: PlayerIdx, n = 1) {
+export function loseEssence(s: GameState, p: PlayerIdx, n = 1) {
   const pl = s.players[p]
   const lost = Math.min(n, pl.essence)
   pl.essence -= lost
@@ -285,7 +311,8 @@ function loseEssence(s: GameState, p: PlayerIdx, n = 1) {
   }
 }
 
-function deleteTop(s: GameState, p: PlayerIdx, storyId: string) {
+/** Raw delete of a Story's top Entity: no protection, replacement or trigger (see effects.ts destroy). */
+export function removeTop(s: GameState, p: PlayerIdx, storyId: string) {
   const pl = s.players[p]
   const story = pl.stories.find((st) => st.id === storyId)
   if (!story) return
@@ -344,164 +371,197 @@ export function reduce(prev: GameState, a: Action): GameState {
   if (prev.winner !== null && a.t !== 'clearLastFight') return prev
   if (prev.choices.length && a.t !== 'choose' && a.t !== 'concede' && a.t !== 'clearLastFight') return prev
   const s = clone(prev)
+  building.add(s)
+  try {
+    if (!step(s, a)) return prev
+    settle(s)
+    return s
+  } finally {
+    building.delete(s)
+  }
+}
+
+/** Drops picks that left their zone from the current choice, and skips choices with nothing left to pick. */
+function settle(s: GameState) {
+  if (s.winner !== null) s.choices = []
+  while (s.choices.length) {
+    const ch = s.choices[0]
+    const zone = ch.zone === 'field' ? null : s.players[ch.player][ch.zone]
+    const options = ch.options.filter((uid) => (zone ? zone.some((c) => c.uid === uid) : ownerOf(s, uid) !== null))
+    if (options.length) {
+      s.choices[0] = { ...ch, options, min: Math.min(ch.min, options.length), max: Math.min(ch.max, options.length) }
+      return
+    }
+    log(s, `${ch.prompt.split(':')[0]}: nothing left to choose.`)
+    s.choices = s.choices.slice(1)
+  }
+}
+
+/** Applies a to s in place; false if the action is illegal. */
+function step(s: GameState, a: Action): boolean {
   const me = s.active
   const pl = s.players[me]
 
   switch (a.t) {
     case 'imagineNew': {
       const c = pl.thoughts.find((x) => x.uid === a.uid)
-      if (!c || s.phase !== 'main' || !canStart(s, me, c)) return prev
+      if (!c || s.phase !== 'main' || !canStart(s, me, c)) return false
       pl.thoughts = pl.thoughts.filter((x) => x.uid !== a.uid)
       pl.stories.push({ id: `s${s.nextUid++}`, cards: [c], startedTurn: s.turn, movedTurn: s.turn, attackedTurn: 0 })
       log(s, `${pl.name} starts a Story with ${cardName(card(c))}.`)
-      return s
+      enter(s, c, me)
+      return true
     }
     case 'continue': {
       const c = pl.thoughts.find((x) => x.uid === a.uid)
       const story = pl.stories.find((st) => st.id === a.storyId)
-      if (!c || !story || s.phase !== 'main' || !canContinue(s, me, c, story)) return prev
+      if (!c || !story || s.phase !== 'main' || !canContinue(s, me, c, story)) return false
       pl.thoughts = pl.thoughts.filter((x) => x.uid !== a.uid)
       const below = top(story)
       story.cards.push(c)
       story.movedTurn = s.turn
       log(s, `${pl.name} continues ${cardName(card(below))}'s Story with ${cardName(card(c))} (Chapter ${card(c).chapter}).`)
-      return s
+      enter(s, c, me)
+      return true
     }
     case 'toFight': {
-      if (s.phase !== 'main') return prev
+      if (s.phase !== 'main') return false
       s.phase = 'fight'
-      return s
+      return true
     }
     case 'attack': {
       const story = pl.stories.find((st) => st.id === a.storyId)
-      if (!story || s.pendingFight || canAttack(s, story)) return prev
+      if (!story || s.pendingFight || canAttack(s, story)) return false
       const foe = other(me)
       const atk = top(story)
       if (a.target === 'player') {
         // HOUSE RULE (playtest-01): a direct attack is only possible when the opponent imagines no Entity.
-        if (s.players[foe].stories.length > 0) return prev
+        if (s.players[foe].stories.length > 0) return false
         story.attackedTurn = s.turn
         log(s, `${cardName(card(atk))} attacks ${s.players[foe].name} directly: they lose 1 Essence.`)
         loseEssence(s, foe)
-        return s
+        return true
       }
       const target = s.players[foe].stories.find((st) => st.id === a.target)
-      if (!target) return prev
+      if (!target) return false
       story.attackedTurn = s.turn
       s.pendingFight = { attacker: { player: me, storyId: story.id }, defender: { player: foe, storyId: target.id }, modes: [null, null] }
       log(s, `${cardName(card(atk))} attacks ${cardName(card(top(target)))}.`)
-      return s
+      return true
     }
     case 'cancelAttack': {
       const f = s.pendingFight
-      if (!f || f.modes[0] || f.modes[1]) return prev
+      if (!f || f.modes[0] || f.modes[1]) return false
       const st = findStory(s, f.attacker.storyId)
       if (st) st.story.attackedTurn = 0
       s.pendingFight = null
       log(s, 'Attack cancelled.')
-      return s
+      return true
     }
     case 'chooseMode': {
       const f = s.pendingFight
-      if (!f || f.modes[a.player]) return prev
+      if (!f || f.modes[a.player]) return false
       f.modes[a.player] = a.mode
       if (f.modes[0] && f.modes[1]) resolveFight(s)
-      return s
+      return true
     }
     case 'clearLastFight':
       s.lastFight = null
-      return s
+      return true
     case 'endTurn': {
-      if (s.pendingFight) return prev
+      if (s.pendingFight) return false
       for (const m of Object.values(s.mods)) {
         m.turnBonus = 0
-        m.traits = m.traits.filter((t) => !t.oneTurn)
+        m.traits = m.traits.filter((t) => !t.oneTurn && !(t.untilTurn !== undefined && t.untilTurn <= s.turn))
       }
       s.active = other(me)
       s.turn += 1
       s.phase = 'main'
       drawOne(s, s.active)
       log(s, `— Turn ${s.turn}: ${s.players[s.active].name} —`)
-      return s
+      return true
     }
     case 'bonus': {
       const m = (s.mods[a.uid] = modsOf(s, a.uid))
       if (a.oneTurn) m.turnBonus += a.delta
       else m.bonus += a.delta
-      return s
+      return true
     }
     case 'trait': {
       const m = (s.mods[a.uid] = modsOf(s, a.uid))
       m.traits = m.traits.filter((t) => t.name !== a.name)
       if (a.on) m.traits.push({ name: a.name, oneTurn: a.oneTurn || undefined })
-      return s
+      return true
     }
     case 'activate': {
-      if (canActivate(s, a.uid)) return prev
+      if (canActivate(s, a.uid)) return false
       const c = findOnField(s, a.uid)!
       const max = card(c).uses ?? 0
       const spent = s.usesSpent[a.uid] ?? 0
       s.usesSpent[a.uid] = spent + 1
       log(s, `${cardName(card(c))} uses its ability (${spent + 1}/${max}).`)
-      return s
+      activate(s, c, me)
+      return true
     }
     case 'choose': {
       const ch = s.choices[0]
-      if (!ch || ch.player !== a.player) return prev
+      if (!ch || ch.player !== a.player) return false
       const picks = [...new Set(a.picks)]
-      if (picks.length < ch.min || picks.length > ch.max || picks.some((p) => !ch.options.includes(p))) return prev
+      if (picks.length < ch.min || picks.length > ch.max || picks.some((p) => !ch.options.includes(p))) return false
       s.choices = s.choices.slice(1)
-      return s
+      resolveChoice(s, ch, picks)
+      return true
     }
     case 'remember': {
       const p = s.players[a.player]
       const c = p.memories.find((x) => x.uid === a.uid)
-      if (!c) return prev
+      if (!c) return false
       p.memories = p.memories.filter((x) => x.uid !== a.uid)
       p.thoughts.push(c)
       shuffle(s, p.memories)
       log(s, `${p.name} remembers ${cardName(card(c))} from their Memories.`)
-      return s
+      return true
     }
     case 'forget': {
       const p = s.players[a.player]
       const c = p.thoughts.find((x) => x.uid === a.uid)
-      if (!c) return prev
+      if (!c) return false
       p.thoughts = p.thoughts.filter((x) => x.uid !== a.uid)
       p.discard.push(c)
       log(s, `${p.name} forgets ${cardName(card(c))}.`)
-      return s
+      forgotten(s, c)
+      return true
     }
     case 'draw':
       drawOne(s, a.player)
       log(s, `${s.players[a.player].name} draws a card.`)
-      return s
+      return true
     case 'deleteTop':
-      deleteTop(s, a.player, a.storyId)
-      return s
+      removeTop(s, a.player, a.storyId)
+      return true
     case 'loseEssence':
       log(s, `${s.players[a.player].name} loses 1 Essence.`)
       loseEssence(s, a.player)
-      return s
+      return true
     case 'gainEssence': {
       const p = s.players[a.player]
-      if (p.lost <= 0) return prev
+      if (p.lost <= 0) return false
       p.lost -= 1
       p.essence += 1
       log(s, `${p.name} regains 1 Essence.`)
-      return s
+      return true
     }
     case 'disperse': {
       const p = s.players[a.player]
-      if (p.lost <= 0) return prev
+      if (p.lost <= 0) return false
       p.lost -= 1
       log(s, `${p.name} disperses 1 lost Essence.`)
-      return s
+      return true
     }
     case 'concede':
       s.winner = other(a.player)
       log(s, `${s.players[a.player].name} concedes.`)
-      return s
+      return true
   }
 }
 
@@ -536,7 +596,11 @@ function resolveFight(s: GameState) {
   s.lastFight = { attacker, defender, outcome }
   const desc = (x: FightSide) => `${cardName(card(x.card))} ${x.mode === 'sure' ? 'takes its sure hit' : `flips ${x.flips}`} → ${x.total}`
   log(s, `Fight: ${desc(attacker)} vs ${desc(defender)}.`)
-  if (outcome === 'attacker') deleteTop(s, f.defender.player, f.defender.storyId)
-  else if (outcome === 'defender') deleteTop(s, f.attacker.player, f.attacker.storyId)
-  else log(s, 'Tie: both Entities survive.')
+  const loser = outcome === 'attacker' ? defender : outcome === 'defender' ? attacker : null
+  const deleted = loser ? destroy(s, loser.card.uid) : false
+  if (!loser) log(s, 'Tie: both Entities survive.')
+  afterFight(s, [
+    { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
+    { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },
+  ])
 }

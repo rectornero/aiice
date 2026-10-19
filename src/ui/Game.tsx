@@ -258,7 +258,7 @@ function StoryActions({ s, me, owner, story, act, done }: {
         )
       )}
       {mine && uses > 0 && (
-        <button className="btn" disabled={spent >= uses} onClick={() => act({ t: 'use', uid: t.uid })}>
+        <button className="btn" disabled={spent >= uses} onClick={() => act({ t: 'activate', uid: t.uid })}>
           Use ◆ ability ({uses - spent} of {uses} left this game)
         </button>
       )}

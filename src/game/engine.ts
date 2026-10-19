@@ -1,6 +1,13 @@
 // AI-ICE rules engine: a pure reducer, (state, action) → state.
 // Follows rulebook draft v0.2. Choices the rulebook leaves open are marked HOUSE RULE so they're easy to change.
-// Card abilities are not automated yet: players apply them with the manual tools (bonuses, traits, uses, Remember).
+// Card abilities live in effects.ts. The manual tools (bonuses, traits, Remember) stay available as overrides.
+//
+// CONTRACT shared by the UI, the bot and online play:
+// - Read Entity values only through traitsOf / powerBonus / sureOf / flipsFor, never s.mods directly,
+//   because continuous ("While imagined") effects are computed, not stored.
+// - When s.choices is non-empty, the game waits for choices[0].player to send { t: 'choose', picks }.
+//   Every other action is rejected meanwhile, except 'concede' and 'clearLastFight'.
+// - Activated (orange ◆) abilities are used with { t: 'activate', uid }; check canActivate first.
 
 import { CARD_BY_ID, cardName, type Card } from './cards'
 
@@ -79,6 +86,24 @@ export interface PendingFight {
 
 export type Phase = 'main' | 'fight'
 
+/** A decision an effect needs from a player, e.g. "brave → 3 Entities" or "Remember 1 Entity [Chapter: 2]". */
+export interface PendingChoice {
+  player: PlayerIdx
+  /** uid of the card whose effect asks */
+  sourceUid: string
+  /** shown to the player, e.g. "Choose exactly 3 Entities: they get brave until end of turn" */
+  prompt: string
+  /** where the options are, so the UI knows how to show them */
+  zone: 'field' | 'memories' | 'thoughts'
+  /** selectable card uids (for 'field': uids of imagined Entities) */
+  options: string[]
+  min: number
+  max: number
+  /** effects.ts internal: which continuation runs when the choice is made */
+  effect: string
+  data?: Record<string, string | number | boolean>
+}
+
 export interface GameState {
   rng: number
   nextUid: number
@@ -89,6 +114,8 @@ export interface GameState {
   mods: Record<string, Mods>
   usesSpent: Record<string, number>
   pendingFight: PendingFight | null
+  /** queue of decisions effects are waiting for; choices[0] is the current one */
+  choices: PendingChoice[]
   lastFight: FightResult | null
   winner: PlayerIdx | null
   log: string[]
@@ -105,7 +132,8 @@ export type Action =
   | { t: 'endTurn' }
   | { t: 'bonus'; uid: string; delta: number; oneTurn: boolean }
   | { t: 'trait'; uid: string; name: string; oneTurn: boolean; on: boolean }
-  | { t: 'use'; uid: string }
+  | { t: 'activate'; uid: string }
+  | { t: 'choose'; player: PlayerIdx; picks: string[] }
   | { t: 'remember'; player: PlayerIdx; uid: string }
   | { t: 'forget'; player: PlayerIdx; uid: string }
   | { t: 'draw'; player: PlayerIdx }
@@ -140,8 +168,48 @@ export function modsOf(s: GameState, uid: string): Mods {
   return s.mods[uid] ?? { bonus: 0, turnBonus: 0, traits: [] }
 }
 
+/** All traits an Entity has right now: given by effects or tools, plus continuous effects. */
+export function traitsOf(s: GameState, uid: string): string[] {
+  return [...new Set(modsOf(s, uid).traits.map((t) => t.name))]
+}
+
 export function hasTrait(s: GameState, uid: string, name: string) {
-  return modsOf(s, uid).traits.some((t) => t.name === name)
+  return traitsOf(s, uid).includes(name)
+}
+
+/** Total +N/−N on an Entity right now (permanent, this turn, and continuous effects). */
+export function powerBonus(s: GameState, uid: string): number {
+  const m = modsOf(s, uid)
+  return m.bonus + m.turnBonus
+}
+
+/** The Entity's sure hit, before bonuses. */
+export function sureOf(_s: GameState, c: CardInst): number {
+  return card(c).sure
+}
+
+/** Why the Entity's activated ability can't be used now, or null if it can. */
+export function canActivate(s: GameState, uid: string): string | null {
+  const owner = ownerOf(s, uid)
+  if (owner === null) return 'Not imagined.'
+  const c = topCard(s, uid)!
+  const max = card(c).uses ?? 0
+  if (!max) return 'No activated ability.'
+  if ((s.usesSpent[uid] ?? 0) >= max) return 'No uses left this game.'
+  if (s.active !== owner) return 'Only on your turn.'
+  if (s.choices.length || s.pendingFight) return 'Finish the current step first.'
+  return null
+}
+
+/** Which player imagines this Entity (top of one of their Stories), or null. */
+export function ownerOf(s: GameState, uid: string): PlayerIdx | null {
+  for (const p of [0, 1] as PlayerIdx[]) if (s.players[p].stories.some((st) => top(st).uid === uid)) return p
+  return null
+}
+
+function topCard(s: GameState, uid: string): CardInst | null {
+  for (const p of s.players) for (const st of p.stories) if (top(st).uid === uid) return top(st)
+  return null
 }
 
 export function flipsFor(s: GameState, c: CardInst) {
@@ -238,6 +306,7 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     mods: {},
     usesSpent: {},
     pendingFight: null,
+    choices: [],
     lastFight: null,
     winner: null,
     log: [],
@@ -257,6 +326,7 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
 
 export function reduce(prev: GameState, a: Action): GameState {
   if (prev.winner !== null && a.t !== 'clearLastFight') return prev
+  if (prev.choices.length && a.t !== 'choose' && a.t !== 'concede' && a.t !== 'clearLastFight') return prev
   const s = clone(prev)
   const me = s.active
   const pl = s.players[me]
@@ -350,14 +420,21 @@ export function reduce(prev: GameState, a: Action): GameState {
       if (a.on) m.traits.push({ name: a.name, oneTurn: a.oneTurn || undefined })
       return s
     }
-    case 'use': {
-      const c = findOnField(s, a.uid)
-      if (!c) return prev
+    case 'activate': {
+      if (canActivate(s, a.uid)) return prev
+      const c = findOnField(s, a.uid)!
       const max = card(c).uses ?? 0
       const spent = s.usesSpent[a.uid] ?? 0
-      if (spent >= max) return prev
       s.usesSpent[a.uid] = spent + 1
       log(s, `${cardName(card(c))} uses its ability (${spent + 1}/${max}).`)
+      return s
+    }
+    case 'choose': {
+      const ch = s.choices[0]
+      if (!ch || ch.player !== a.player) return prev
+      const picks = [...new Set(a.picks)]
+      if (picks.length < ch.min || picks.length > ch.max || picks.some((p) => !ch.options.includes(p))) return prev
+      s.choices = s.choices.slice(1)
       return s
     }
     case 'remember': {
@@ -418,10 +495,9 @@ function findOnField(s: GameState, uid: string): CardInst | null {
 }
 
 function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode): FightSide {
-  const m = modsOf(s, c.uid)
-  const bonus = m.bonus + m.turnBonus
+  const bonus = powerBonus(s, c.uid)
   if (mode === 'sure') {
-    const base = card(c).sure
+    const base = sureOf(s, c)
     return { player, card: c, mode, base, bonus, flips: 0, flipped: [], total: base + bonus }
   }
   const pl = s.players[player]

@@ -33,6 +33,17 @@ export interface Trait {
   name: string
   /** expires at the end of the current turn ([1 turn]) */
   oneTurn?: boolean
+  /** expires at the end of this global turn number (e.g. "[3 turns]", "until the end of your next turn") */
+  untilTurn?: number
+}
+
+/** One trait on an Entity, for display: where it comes from and when it ends. */
+export interface TraitInfo {
+  name: string
+  /** 'effect' = stored (given by an effect or the manual tools), 'continuous' = from a "While imagined" effect */
+  source: 'effect' | 'continuous'
+  /** last global turn it lasts, if temporary */
+  untilTurn?: number
 }
 
 export interface Mods {
@@ -171,6 +182,11 @@ export function modsOf(s: GameState, uid: string): Mods {
 /** All traits an Entity has right now: given by effects or tools, plus continuous effects. */
 export function traitsOf(s: GameState, uid: string): string[] {
   return [...new Set(modsOf(s, uid).traits.map((t) => t.name))]
+}
+
+/** Traits with their source and duration, for the UI. */
+export function traitDetails(s: GameState, uid: string): TraitInfo[] {
+  return modsOf(s, uid).traits.map((t) => ({ name: t.name, source: 'effect', untilTurn: t.oneTurn ? s.turn : t.untilTurn }))
 }
 
 export function hasTrait(s: GameState, uid: string, name: string) {

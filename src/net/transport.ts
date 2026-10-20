@@ -1,5 +1,5 @@
 // How messages travel between the two clients of a room. The match protocol (match.ts) only needs this interface,
-// so it runs the same over the Neon relay (the real thing) and over an in-memory hub (tests).
+// so it runs the same over the Netlify Database relay (the real thing) and over an in-memory hub (tests).
 
 import type { NetMsg } from './match'
 import type { RelayPoll } from './relayServer'
@@ -30,7 +30,7 @@ function listeners<T extends unknown[]>() {
   }
 }
 
-// ---------- Neon relay (Netlify Function) ----------
+// ---------- Netlify Database relay ----------
 
 /** Online play needs the relay function, which only exists on the deployed site (and `netlify dev`),
  *  not in the single-file test build. */

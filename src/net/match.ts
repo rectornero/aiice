@@ -1,4 +1,4 @@
-// Online two-player matches: room protocol on top of a Transport (the Neon relay, or in memory for tests).
+// Online two-player matches: room protocol on top of a Transport (the Netlify Database relay, or in memory for tests).
 //
 // The host is authoritative. It creates the room, starts the match when a guest says hello (seed, decks, names, seats),
 // and is the only one who orders actions: every action goes to the host, which checks it (legal for reduce and sent by

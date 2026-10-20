@@ -1,8 +1,8 @@
 // Server side of online play (runs in a Netlify Function, see netlify/functions/relay.mts).
-// A dumb relay over a Neon Postgres database: clients POST messages into their room and poll for the ones they haven't seen.
+// A dumb relay over Netlify Database: clients POST messages into their room and poll for the ones they haven't seen.
 // The match protocol itself (match.ts) runs in the browsers; the host's client is the referee.
 
-/** pg-style query function, so the same code runs on Neon (pool.query) and PGlite in tests. */
+/** pg-style query function, so the same code runs on Netlify Database (pool.query) and PGlite in tests. */
 export type Query = (text: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>
 
 export interface RelayPoll {
@@ -15,30 +15,6 @@ export interface RelayPoll {
 }
 
 export const PRESENCE_SECONDS = 8
-
-/** Tables the relay needs. Idempotent: the function runs it once per cold start, so there's no migration step. */
-export const SCHEMA = `-- Online play relay: the two clients of a room exchange protocol messages through this table (see src/net/relayServer.ts).
-CREATE TABLE IF NOT EXISTS relay_messages (
-  id bigserial PRIMARY KEY,
-  code text NOT NULL,
-  sender text NOT NULL,
-  body jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS relay_messages_code_id ON relay_messages (code, id);
-CREATE INDEX IF NOT EXISTS relay_messages_created ON relay_messages (created_at);
-
--- Who is in a room: each poll refreshes seen_at.
-CREATE TABLE IF NOT EXISTS relay_presence (
-  code text NOT NULL,
-  client_id text NOT NULL,
-  seen_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (code, client_id)
-);`
-
-export async function ensureSchema(q: Query) {
-  for (const stmt of SCHEMA.split(';').map((x) => x.trim()).filter(Boolean)) await q(stmt)
-}
 const MAX_BODY = 64 * 1024
 const BATCH = 200
 const okCode = (c: unknown): c is string => typeof c === 'string' && /^[A-Z0-9]{3,10}$/.test(c)

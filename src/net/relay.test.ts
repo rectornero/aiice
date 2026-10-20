@@ -1,13 +1,14 @@
 // End-to-end: two match clients talk through the real relay handler, backed by PGlite (in-process Postgres)
-// with the real schema, the same way they would through the Netlify Function and Neon.
+// with the real migration, the same way they would through the Netlify Function and Netlify Database.
 import { PGlite } from '@electric-sql/pglite'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { botPolicy } from '../game/bot'
 import { STARTER_DECKS } from '../game/cards'
 import { whoMustAct } from '../game/driver'
 import { reduce, type GameState } from '../game/engine'
 import { createRoom, joinRoom, newRoomCode, type KV, type Match } from './match'
-import { ensureSchema, handleRelay, type Query } from './relayServer'
+import { handleRelay, type Query } from './relayServer'
 import { netlifyTransport } from './transport'
 
 const kv = (): KV => {
@@ -17,9 +18,8 @@ const kv = (): KV => {
 
 async function relay() {
   const db = new PGlite()
+  await db.exec(readFileSync(new URL('../../netlify/database/migrations/0001_relay.sql', import.meta.url), 'utf8'))
   const q: Query = async (text, params) => ({ rows: (await db.query<Record<string, unknown>>(text, params)).rows })
-  await ensureSchema(q)
-  await ensureSchema(q) // idempotent
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) =>
     handleRelay(new Request(new URL(String(input), 'http://relay.test'), init), q)) as typeof fetch
   return { db, q, fetchFn }
@@ -43,7 +43,7 @@ function table(m: Match) {
   return { t, net: setup.net }
 }
 
-describe('Neon relay', () => {
+describe('Netlify Database relay', () => {
   it('rejects bad requests', async () => {
     const { q } = await relay()
     expect((await handleRelay(new Request('http://x/api/relay?code=ab&id=me&after=0'), q)).status).toBe(400)

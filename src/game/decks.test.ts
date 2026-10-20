@@ -44,9 +44,9 @@ describe('storage', () => {
   })
 
   it('ignores broken stored data', () => {
-    localStorage.setItem('ai-ice.decks.v1', '{not json')
+    localStorage.setItem('ai-ice.si.decks.v1', '{not json')
     expect(savedDecks()).toEqual([])
-    localStorage.setItem('ai-ice.decks.v1', JSON.stringify([{ id: 'a', name: 'ok', cards: ['SOFA-001'] }, { id: 1 }, null]))
+    localStorage.setItem('ai-ice.si.decks.v1', JSON.stringify([{ id: 'a', name: 'ok', cards: ['SOFA-001'] }, { id: 1 }, null]))
     expect(savedDecks().map((d) => d.id)).toEqual(['a'])
   })
 
@@ -81,7 +81,7 @@ describe('validateDeck', () => {
 
   it('allows only Entities and known cards', () => {
     const cards = [...STARTER_DECKS.music.cards.slice(2), 'SOFA-R01', 'NOPE-1']
-    expect(validateDeck(cards).problems).toEqual(['Aqualith is a Relic; only Entities can be played for now.', 'Unknown card NOPE-1.'])
+    expect(validateDeck(cards).problems).toEqual(['Aqualith is a Relic; only Entities and Chants can be played for now.', 'Unknown card NOPE-1.'])
   })
 
   it('warns about few Chapter 1 Entities and Chapter gaps', () => {
@@ -96,7 +96,7 @@ describe('validateDeck', () => {
   })
 
   it('counts the chapter curve', () => {
-    expect(chapterCurve(STARTER_DECKS.fate.cards)).toEqual({ 1: 10, 2: 7, 3: 3 })
+    expect(chapterCurve(STARTER_DECKS.fate.cards)).toEqual({ 1: 7, 2: 5, 3: 2 })
     expect(chapterCurve(['SOFA-R01', 'NOPE'])).toEqual({})
   })
 })

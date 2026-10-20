@@ -23,13 +23,14 @@ export const DECK_RULES = {
   size: 20,
   /** at most this many copies of one card */
   maxCopies: 3,
-  /** only these card types can be in a deck (Words and Relics aren't playable yet) */
-  playableTypes: ['Entity'] as readonly Card['type'][],
+  /** only these card types can be in a deck (Relics aren't playable yet). V2: Chants are playable. */
+  playableTypes: ['Entity', 'Chant'] as readonly Card['type'][],
   /** warn when the deck has fewer Chapter 1 Entities than this (they start Stories) */
   minChapter1: 6,
 } as const
 
-const STORAGE_KEY = 'ai-ice.decks.v1'
+// V2 fork: its own storage key, so decks saved in the Platform app aren't mixed with this one's card pool
+const STORAGE_KEY = 'ai-ice.si.decks.v1'
 
 export function starterDecks(): Deck[] {
   return Object.entries(STARTER_DECKS).map(([id, d]) => ({ id, name: d.name, cards: [...d.cards], starter: true }))
@@ -141,7 +142,7 @@ export function validateDeck(cards: string[]): DeckCheck {
     const c = CARD_BY_ID[id]
     if (!c) { problems.push(`Unknown card ${id}.`); continue }
     if (n > maxCopies) problems.push(`${c.name}: ${n} copies (max ${maxCopies}).`)
-    if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities can be played for now.`)
+    if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities and Chants can be played for now.`)
   }
 
   const curve = chapterCurve(cards)

@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cardName } from '../game/cards'
 import { whoMustAct, type MatchSetup } from '../game/driver'
 import {
-  bonusDetails, canActivate, canAttack, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, sureOf, top, traitDetails, traitsOf,
+  attackTargets, bonusDetails, canActivate, canAttack, canChant, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, RULES, sureOf, top, traitDetails, traitsOf,
   type Action, type CardInst, type GameState, type PlayerIdx, type Story, type TraitInfo,
 } from '../game/engine'
-import { CardBack, CardDetails, CardText, CardView } from './CardView'
+import { CardDetails, CardText, CardView } from './CardView'
 import { ChoiceBar, ChoiceModal, picksValid } from './ChoicePrompt'
 import { FightChoice, FightReveal } from './FightView'
 import { useMatch, type MatchMode, type NetStatus } from './useMatch'
@@ -14,6 +14,7 @@ const TRAITS = ['brave', 'resonant', 'fate-favored', 'ill-fated', 'pacifist', 'd
 
 type Sel =
   | { kind: 'hand'; uid: string }
+  | { kind: 'chant'; uid: string }
   | { kind: 'story'; storyId: string }
   | null
 
@@ -90,11 +91,11 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
     }
     if (!fighting) return undefined
     if (owner === me) return canAttack(s, st) ? undefined : 'ready'
-    return armed ? 'target' : undefined
+    return armed && attackTargets(s, foe).includes(st) ? 'target' : undefined
   }
   const clickStory = (st: Story, owner: PlayerIdx) => {
     if (fieldChoice?.options.includes(top(st).uid)) toggle(top(st).uid)
-    else if (owner === foe && armed) {
+    else if (owner === foe && armed && attackTargets(s, foe).includes(st)) {
       act({ t: 'attack', storyId: armed.id, target: st.id })
       setSel(null)
     } else setSel({ kind: 'story', storyId: st.id })
@@ -110,6 +111,10 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
       const c = s.players[me].thoughts.find((x) => x.uid === sel.uid)
       return c ? { kind: 'hand' as const, c } : null
     }
+    if (sel.kind === 'chant') {
+      const c = s.players.flatMap((p) => p.chants).find((x) => x.uid === sel.uid)
+      return c ? { kind: 'chant' as const, c } : null
+    }
     const f = findStory(s, sel.storyId)
     return f ? { kind: 'story' as const, ...f, c: top(f.story) } : null
   })()
@@ -119,7 +124,8 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
   return (
     <div className={`game ${selected ? 'sheet-open' : ''}`}>
       <div className="board">
-        <PlayerArea s={s} p={foe} mine={false} sel={sel} glow={glow} clickStory={clickStory} openPile={(kind) => setModal({ kind, player: foe })} />
+        <PlayerArea s={s} p={foe} mine={false} sel={sel} glow={glow} clickStory={clickStory} openPile={(kind) => setModal({ kind, player: foe })}
+          clickChant={(uid) => setSel({ kind: 'chant', uid })} />
         <div className="midbar">
           <div className="turninfo">
             <b>Turn {s.turn}</b> · {s.players[s.active].name}'s turn · <span className="phase">{s.phase === 'main' ? 'Main step' : 'Fight step'}</span>
@@ -138,12 +144,13 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
         ) : (
           <HintBar s={s} me={me} mode={mode} botThinking={botThinking} armed={armed} attackPlayer={attackPlayer} />
         )}
-        <PlayerArea s={s} p={me} mine sel={sel} glow={glow} clickStory={clickStory} openPile={(kind) => setModal({ kind, player: me })} />
+        <PlayerArea s={s} p={me} mine sel={sel} glow={glow} clickStory={clickStory} openPile={(kind) => setModal({ kind, player: me })}
+          clickChant={(uid) => setSel({ kind: 'chant', uid })} />
         <div className="hand">
           {s.players[me].thoughts.map((c) => {
-            const playable = myMove && s.phase === 'main' && (canStart(s, me, c) || s.players[me].stories.some((st) => canContinue(s, me, c, st)))
+            const playable = myMove && s.phase === 'main' && (canStart(s, me, c) || !canChant(s, me, c) || s.players[me].stories.some((st) => canContinue(s, me, c, st)))
             return (
-              <CardView key={c.uid} card={card(c)} selected={sel?.kind === 'hand' && sel.uid === c.uid}
+              <CardView key={c.uid} card={card(c)} size="sm" selected={sel?.kind === 'hand' && sel.uid === c.uid}
                 badge={playable ? '▲' : undefined} onClick={() => setSel({ kind: 'hand', uid: c.uid })} />
             )
           })}
@@ -163,7 +170,7 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
           </div>
         ) : (
           <div className="muted pad">
-            Select a card to see it and act. ▲ marks cards you can imagine now.
+            Select a card to see it and act. ▲ marks cards you can play now.
           </div>
         )}
         <div className="log" ref={logRef}>
@@ -220,14 +227,16 @@ function hintFor(s: GameState, me: PlayerIdx, mode: MatchMode, botThinking: bool
     const chapters = [...new Set(pl.thoughts.filter((c) => pl.stories.some((st) => canContinue(s, me, c, st))).map((c) => card(c).chapter))].sort()
     if (chapters.length) items.push(`Continue a Story with a Chapter ${chapters.join(' or ')}`)
     if (pl.thoughts.some((c) => canStart(s, me, c))) items.push('Imagine a Chapter 1 Entity to start a Story')
+    if (pl.thoughts.some((c) => !canChant(s, me, c))) items.push('Chant a green card')
     const fightState = { ...s, phase: 'fight' as const }
     if (pl.stories.some((st) => !canAttack(fightState, st))) items.push('Go to Fight')
     if (!items.length) items.push('End your turn')
-    return items.slice(0, 2).join(' · ')
+    return items.slice(0, 3).join(' · ')
   }
   const foe = s.players[other(me)]
   if (armed) {
-    return foe.stories.length > 0 ? <>Tap an enemy Entity to attack it with <b>{card(top(armed)).name}</b></> : (
+    const guarded = foe.stories.length > attackTargets(s, other(me)).length
+    return foe.stories.length > 0 ? <>Tap {guarded ? 'a glowing defender' : 'an enemy Entity'} to attack it with <b>{card(top(armed)).name}</b></> : (
       <button className="btn danger sm" onClick={attackPlayer}>⚔ Attack {foe.name} directly</button>
     )
   }
@@ -237,37 +246,45 @@ function hintFor(s: GameState, me: PlayerIdx, mode: MatchMode, botThinking: bool
 
 type Glow = 'ready' | 'target' | 'option' | 'picked' | undefined
 
-function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile }: {
+function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile, clickChant }: {
   s: GameState; p: PlayerIdx; mine: boolean; sel: Sel
   glow: (st: Story, owner: PlayerIdx) => Glow
   clickStory: (st: Story, owner: PlayerIdx) => void
   openPile: (k: 'memories' | 'discard') => void
+  clickChant: (uid: string) => void
 }) {
   const pl = s.players[p]
+  const stories = (
+    <div className="row3 stories" aria-label={`${pl.name}'s Stories`}>
+      {pl.stories.map((st) => <StoryView key={st.id} s={s} st={st} glow={glow(st, p)} selected={sel?.kind === 'story' && sel.storyId === st.id} onClick={() => clickStory(st, p)} />)}
+      {Array.from({ length: Math.max(0, RULES.maxStories - pl.stories.length) }, (_, i) => <div key={i} className="slot">Story</div>)}
+    </div>
+  )
+  const chants = (
+    <div className="row3 chants" aria-label={`${pl.name}'s Chant row`}>
+      {pl.chants.map((c) => (
+        <CardView key={c.uid} card={card(c)} size="sm" tile selected={sel?.kind === 'chant' && sel.uid === c.uid} onClick={() => clickChant(c.uid)} />
+      ))}
+      {Array.from({ length: Math.max(0, RULES.maxChants - pl.chants.length) }, (_, i) => (
+        <div key={i} className="slot chant-slot">{i === 0 ? `Echo ${pl.chants.length + 1}` : 'Chant'}</div>
+      ))}
+    </div>
+  )
   return (
     <section className={`area ${mine ? 'mine' : 'theirs'} ${s.active === p ? 'active' : ''}`}>
       <div className="area-head">
         <div className="pname">{pl.name}{s.active === p && ' ●'}</div>
-        <div className="essence" title="Essence">
+        <div className="essence" title={`Essence ${pl.essence}`}>
           {Array.from({ length: pl.essence }, (_, i) => <span key={i} className="ess on">◆</span>)}
           {Array.from({ length: pl.lost }, (_, i) => <span key={`l${i}`} className="ess off" title="lost Essence">◇</span>)}
         </div>
-        {!mine && <div className="muted">{pl.thoughts.length} in Thoughts</div>}
         <div className="pile-links">
-          <button className="btn ghost sm" disabled={!mine} onClick={() => openPile('memories')}>Memories {pl.memories.length}</button>
-          <button className="btn ghost sm" onClick={() => openPile('discard')}>Discard {pl.discard.length}</button>
+          {!mine && <span className="muted small">✋{pl.thoughts.length}</span>}
+          <button className="btn ghost sm" disabled={!mine} onClick={() => openPile('memories')} title="Memories (deck)">🂠 {pl.memories.length}</button>
+          <button className="btn ghost sm" onClick={() => openPile('discard')} title="Discard pile">🗑 {pl.discard.length}</button>
         </div>
       </div>
-      <div className="area-body">
-        <div className="piles">
-          <CardBack label="Memories" count={pl.memories.length} onClick={mine ? () => openPile('memories') : undefined} />
-          <CardBack label="Discard" count={pl.discard.length} onClick={() => openPile('discard')} />
-        </div>
-        <div className="stories">
-          {pl.stories.map((st) => <StoryView key={st.id} s={s} st={st} glow={glow(st, p)} selected={sel?.kind === 'story' && sel.storyId === st.id} onClick={() => clickStory(st, p)} />)}
-          {Array.from({ length: Math.max(0, 5 - pl.stories.length) }, (_, i) => <div key={i} className="slot">Story</div>)}
-        </div>
-      </div>
+      {mine ? <>{stories}{chants}</> : <>{chants}{stories}</>}
     </section>
   )
 }
@@ -326,15 +343,24 @@ function HandActions({ s, me, c, canPlay, act, done }: {
 }) {
   const myTurn = canPlay && s.phase === 'main'
   const conts = s.players[me].stories.filter((st) => canContinue(s, me, c, st))
+  const noChant = card(c).type === 'Chant' ? canChant(s, me, c) : null
   return (
     <div className="actions">
+      {myTurn && card(c).type === 'Chant' && (noChant === null ? (
+        <button className="btn green" onClick={() => { act({ t: 'chant', uid: c.uid }); done() }}>
+          Chant it{s.players[me].chants.length + 1 >= RULES.maxChants ? ' and complete the Phrase' : ''}
+        </button>
+      ) : <div className="muted">{noChant}</div>)}
       {myTurn && canStart(s, me, c) && <button className="btn primary" onClick={() => { act({ t: 'imagineNew', uid: c.uid }); done() }}>Imagine: start a new Story</button>}
       {myTurn && conts.map((st) => (
         <button key={st.id} className="btn primary" onClick={() => { act({ t: 'continue', uid: c.uid, storyId: st.id }); done() }}>
           Continue {card(top(st)).name}'s Story
         </button>
       ))}
-      {myTurn && !canStart(s, me, c) && conts.length === 0 && card(c).type === 'Entity' && (
+      {myTurn && !canStart(s, me, c) && conts.length === 0 && card(c).type === 'Entity' && card(c).chapter === 1 && (
+        <div className="muted">All {RULES.maxStories} Story slots are taken.</div>
+      )}
+      {myTurn && !canStart(s, me, c) && conts.length === 0 && card(c).type === 'Entity' && card(c).chapter > 1 && (
         <div className="muted">Needs a Story with a Chapter {card(c).chapter - 1} on top that hasn't moved this turn.</div>
       )}
       {!myTurn && <div className="muted">You can imagine cards in your Main step.</div>}
@@ -385,7 +411,7 @@ function StoryActions({ s, me, owner, story, canPlay, act, done }: {
             <b>Attack</b>
             {foe.stories.length === 0 ? (
               <button className="btn danger" onClick={() => { act({ t: 'attack', storyId: story.id, target: 'player' }); done() }}>Attack {foe.name} directly</button>
-            ) : foe.stories.map((st) => (
+            ) : attackTargets(s, other(me)).map((st) => (
               <button key={st.id} className="btn danger" onClick={() => { act({ t: 'attack', storyId: story.id, target: st.id }); done() }}>
                 ⚔ {cardName(card(top(st)))}
               </button>

@@ -100,7 +100,7 @@ export const CARDS: Card[] = [
   { id: 'SOFA-F03', icon: 'katana', name: 'Seiji Tenno', title: 'The Samurai Emperor', type: 'Entity', domain: 'Fate', chapter: 2, fate: 2, sure: 3, stars: 0,
     text: '(no ability)', flavor: 'It’s not about me... it’s about them. LET’S KEEP OUR HOME SAFE!' },
   { id: 'SOFA-097', icon: 'hourglass', name: 'Prima', title: 'Keeper of Fate', type: 'Entity', domain: 'Fate', chapter: 3, die: 'd8 8', fate: 2, sure: 4, stars: 0, rarity: 'Ultra-Rare',
-    text: 'When instanced: give all your Entities death-defiant and fate-favored; for each they already have, +2 instead. When deleted: delete all Entities on your field.',
+    text: 'When instanced: give all your Entities timeless and fate-favored; for each they already have, +2 instead. When deleted: delete all Entities on your field.',
     flavor: 'I must keep what’s precious for them... for as long as it’s needed.', image: prima },
   { id: 'SOFA-F04', icon: 'wizard-face', name: 'Kazuki Amagiri', title: 'Magister Magician', type: 'Entity', domain: 'Fate', chapter: 3, fate: 3, sure: 2, stars: 1,
     text: 'When instanced: Remember 1 Word [Domain: Fate, Echo: 2].', flavor: 'Luck? It’s all about weaving our skills with opportunity.' },

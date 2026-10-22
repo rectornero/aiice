@@ -167,9 +167,9 @@ export function destroy(s: GameState, uid: string, byFoe = true): boolean {
     return false
   }
   if (EFFECTS[c.cardId]?.insteadOfDeletion?.(s, c, p)) return false
-  // HOUSE RULE (RULES.deathDefiant): death-defiant = "when it would be deleted, its owner loses 1 Essence instead".
-  if (RULES.deathDefiant && hasTrait(s, uid, 'death-defiant')) {
-    log(s, `${nm(c)} is death-defiant: ${pl.name} loses 1 Value instead.`)
+  // HOUSE RULE (RULES.timeless): timeless = "when it would be deleted, its owner loses 1 Essence instead".
+  if (RULES.timeless && hasTrait(s, uid, 'timeless')) {
+    log(s, `${nm(c)} is timeless: ${pl.name} loses 1 Value instead.`)
     loseEssence(s, p, 1, nm(c))
     return false
   }
@@ -364,7 +364,7 @@ export const EFFECTS: Record<string, Effect> = {
   // Luna Harmonia — forgotten when any other Entity is forgotten. Each resonant Entity gets +2.
   'SOFA-M05': {
     // HOUSE RULE: "forgotten" = any Entity card going to a discard pile (deleted, or forgotten from Thoughts);
-    // Luna goes through the normal deletion path, so protection and death-defiant can save her.
+    // Luna goes through the normal deletion path, so protection and timeless can save her.
     onOtherForgotten: (s, self) => {
       if (ownerOf(s, self.uid) === null) return
       log(s, 'Luna Harmonia: another Entity was forgotten, so she goes too.')
@@ -461,14 +461,14 @@ export const EFFECTS: Record<string, Effect> = {
     onDeleted: (s, self, owner) =>
       traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fate-favored', {}, ['of your Entities', 'of your Entities']),
   },
-  // Prima — When instanced: your Entities get death-defiant and fate-favored; for each they already have, +2 instead.
+  // Prima — When instanced: your Entities get timeless and fate-favored; for each they already have, +2 instead.
   // When deleted: delete all Entities on your field.
   'SOFA-097': {
     onEnter: (s, _self, owner) => {
-      log(s, 'Prima: your Entities get death-defiant and fate-favored (+2 for each they already have).')
+      log(s, 'Prima: your Entities get timeless and fate-favored (+2 for each they already have).')
       for (const e of imagined(s, owner)) {
-        const had = ['death-defiant', 'fate-favored'].filter((t) => hasTrait(s, e.c.uid, t))
-        for (const t of ['death-defiant', 'fate-favored']) if (!had.includes(t)) giveTrait(s, e.c.uid, t)
+        const had = ['timeless', 'fate-favored'].filter((t) => hasTrait(s, e.c.uid, t))
+        for (const t of ['timeless', 'fate-favored']) if (!had.includes(t)) giveTrait(s, e.c.uid, t)
         if (had.length) addBonus(s, e.c.uid, 2 * had.length)
       }
     },

@@ -108,8 +108,8 @@ function storyValue(s: GameState, p: PlayerIdx, st: Story) {
   const c = topOf(st)
   const traits = traitsOf(s, c.uid)
   if (traits.includes(UNDELETABLE)) return 0
-  // death-defiant (and Kurogane's own text): its owner loses 1 Essence instead, the game's real currency
-  if (traits.includes('death-defiant') || /instead lose \d+ (Essence|Value)/i.test(cardOf(c).text)) return s.players[p].essence <= (RULES.heart ? 0 : 1) ? 100 : 12 / (s.players[p].essence + (RULES.heart ? 1 : 0)) + 2
+  // timeless (and Kurogane's own text): its owner loses 1 Essence instead, the game's real currency
+  if (traits.includes('timeless') || /instead lose \d+ (Essence|Value)/i.test(cardOf(c).text)) return s.players[p].essence <= (RULES.heart ? 0 : 1) ? 100 : 12 / (s.players[p].essence + (RULES.heart ? 1 : 0)) + 2
   let v = 1 + strength(s, p, c) + 0.5 * cardOf(c).chapter
   // "When deleted: delete all Entities on your field" (Prima)
   if (/When deleted: delete all/i.test(cardOf(c).text)) v += 2 * (s.players[p].stories.length - 1) + 2

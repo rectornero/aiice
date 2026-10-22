@@ -365,48 +365,48 @@ describe('Fate', () => {
     expect(hasTrait(s, on(s, 'SOFA-001'), 'fate-favored')).toBe(true)
   })
 
-  it('Prima: death-defiant and fate-favored to your Entities, +2 for each they already have', () => {
+  it('Prima: timeless and fate-favored to your Entities, +2 for each they already have', () => {
     let s = table({ field: [[['SOFA-024', 'SOFA-F03'], 'SOFA-001'], ['SOFA-M03']], hand: [['SOFA-097'], []] })
     s = give(s, on(s, 'SOFA-001'), 'fate-favored')
     s = cont(s, 'SOFA-097', 'SOFA-F03')
     const prima = on(s, 'SOFA-097')
-    expect(traitsOf(s, prima)).toEqual(['death-defiant', 'fate-favored'])
-    expect(traitsOf(s, on(s, 'SOFA-001'))).toEqual(['fate-favored', 'death-defiant'])
+    expect(traitsOf(s, prima)).toEqual(['timeless', 'fate-favored'])
+    expect(traitsOf(s, on(s, 'SOFA-001'))).toEqual(['fate-favored', 'timeless'])
     expect(powerBonus(s, on(s, 'SOFA-001'))).toBe(2)
     expect(powerBonus(s, prima)).toBe(0)
-    expect(hasTrait(s, on(s, 'SOFA-M03'), 'death-defiant')).toBe(false)
+    expect(hasTrait(s, on(s, 'SOFA-M03'), 'timeless')).toBe(false)
   })
 
   it('Prima: when deleted, deletes all your Entities, through protection and replacement', () => {
     let s = table({ field: [['SOFA-097', ['SOFA-024', 'SOFA-F03'], 'SOFA-001', 'SOFA-027'], ['SOFA-M05', 'SOFA-025']], hand: [[], ['SOFA-029']] })
-    s = give(give(s, on(s, 'SOFA-097'), 'star-crossed'), on(s, 'SOFA-001'), 'death-defiant')
+    s = give(give(s, on(s, 'SOFA-097'), 'star-crossed'), on(s, 'SOFA-001'), 'timeless')
     s = structuredClone(s)
     s.active = 1
     s = cont(s, 'SOFA-029', 'SOFA-025')
-    // Noboru deletes Prima → Prima deletes A's field: Seiji (revealing Raiden, which stays), Aqua Beat is death-defiant, Kurogane replaces.
+    // Noboru deletes Prima → Prima deletes A's field: Seiji (revealing Raiden, which stays), Aqua Beat is timeless, Kurogane replaces.
     expect(s.players[0].stories.map((st) => top(st).cardId)).toEqual(['SOFA-024', 'SOFA-001', 'SOFA-027'])
     expect(s.players[0].essence).toBe(3)
     // Prima, then Seiji went to the discard pile: B's Luna goes too
     expect(s.players[1].stories.map((st) => top(st).cardId)).toEqual(['SOFA-029'])
   })
 
-  it('death-defiant HOUSE RULE can be switched off', () => {
-    const was = RULES.deathDefiant
-    RULES.deathDefiant = false
+  it('timeless HOUSE RULE can be switched off', () => {
+    const was = RULES.timeless
+    RULES.timeless = false
     try {
       let s = table({ field: [['SOFA-001'], ['SOFA-M03']] })
-      s = give(s, on(s, 'SOFA-001'), 'death-defiant')
+      s = give(s, on(s, 'SOFA-001'), 'timeless')
       s = fight(s, on(s, 'SOFA-M03'), on(s, 'SOFA-001'))
       expect(s.players[0].stories).toHaveLength(0)
       expect(s.players[0].essence).toBe(5)
     } finally {
-      RULES.deathDefiant = was
+      RULES.timeless = was
     }
   })
 
-  it('death-defiant: a hit on the Heart ends the game and the cascade', () => {
+  it('timeless: a hit on the Heart ends the game and the cascade', () => {
     let s = table({ field: [['SOFA-001'], ['SOFA-M03']] })
-    s = give(s, on(s, 'SOFA-001'), 'death-defiant')
+    s = give(s, on(s, 'SOFA-001'), 'timeless')
     s = structuredClone(s)
     s.players[0].essence = 0
     s = fight(s, on(s, 'SOFA-M03'), on(s, 'SOFA-001'))

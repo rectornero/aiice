@@ -77,8 +77,8 @@ export const RULES = {
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
   noAttackOnStartTurn: true,
-  /** HOUSE RULE: death-defiant = "when it would be deleted, its owner loses 1 Essence instead" (Kurogane's text). */
-  deathDefiant: true,
+  /** HOUSE RULE: timeless = "when it would be deleted, its owner loses 1 Essence instead" (Kurogane's text). */
+  timeless: true,
 }
 
 /** Stored trait for "can't be deleted" (Hikari Mizuki). */

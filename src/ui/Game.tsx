@@ -11,7 +11,7 @@ import { FightChoice, FightReveal } from './FightView'
 import { EssenceCall } from './EssenceCall'
 import { useMatch, type MatchMode, type NetStatus } from './useMatch'
 
-const TRAITS = ['brave', 'resonant', 'fate-favored', 'star-crossed', 'pacifist', 'defender', 'death-defiant', 'charming', 'inoffensive', 'ethereal']
+const TRAITS = ['brave', 'resonant', 'fate-favored', 'star-crossed', 'pacifist', 'defender', 'timeless', 'charming', 'inoffensive', 'ethereal']
 
 type Sel =
   | { kind: 'hand'; uid: string }

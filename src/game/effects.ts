@@ -267,7 +267,7 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     story.cards.push(c)
     story.movedTurn = s.turn
     log(s, `Familiar Hiroshi: ${pl.name} continues the Story with ${cardName(card(c))}.`)
-    traitOrBonus(s, c, 'fate-favored', 1)
+    traitOrBonus(s, c, 'fated', 1)
     enter(s, c, ch.player)
   },
 }
@@ -303,7 +303,7 @@ export function computeField(s: GameState): Map<string, FieldEntity> {
 const isMusic = (e: { k: Card }) => e.k.domain === 'Music'
 const chantOf = (domain: string, echo?: number) => (k: Card) => k.type === 'Word' && k.domain === domain && (echo === undefined || k.echo === echo)
 
-/** Layer 2 order: Aqua Serenade's fate-favored must exist before Hikari reads it. */
+/** Layer 2 order: Aqua Serenade's fated must exist before Hikari reads it. */
 const GRANT_ORDER = ['SOFA-M04', 'SOFA-096', 'SOFA-028']
 
 export const EFFECTS: Record<string, Effect> = {
@@ -340,10 +340,10 @@ export const EFFECTS: Record<string, Effect> = {
       for (const e of field) if (e !== self && isMusic(e) && has(e, 'resonant') && has(e, 'brave')) e.bonus += 1
     },
   },
-  // Aqua Serenade — any Music "Pianist" gets brave and fate-favored. When deleted: all your resonant Entities get +1.
+  // Aqua Serenade — any Music "Pianist" gets brave and fated. When deleted: all your resonant Entities get +1.
   'SOFA-M04': {
     grant: (field) => {
-      for (const e of field) if (isMusic(e) && e.k.title?.includes('Pianist')) grantTo(e, 'brave', 'fate-favored')
+      for (const e of field) if (isMusic(e) && e.k.title?.includes('Pianist')) grantTo(e, 'brave', 'fated')
     },
     onDeleted: (s, _self, owner) => {
       log(s, 'Aqua Serenade: all your resonant Entities get +1.')
@@ -374,24 +374,24 @@ export const EFFECTS: Record<string, Effect> = {
       for (const e of field) if (has(e, 'resonant')) e.bonus += 2
     },
   },
-  // Familiar Raiden — [B]: star-crossed → ~2 opponent's Entities
+  // Familiar Raiden — [B]: starless → ~2 opponent's Entities
   'SOFA-024': {
     onEnter: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 2, true, 'star-crossed', {}, ["opponent's Entity", "opponent's Entities"]),
+      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 2, true, 'starless', {}, ["opponent's Entity", "opponent's Entities"]),
   },
-  // Familiar Takeshi — [B]: fate-favored → 1 other Entity
+  // Familiar Takeshi — [B]: fated → 1 other Entity
   'SOFA-025': {
     onEnter: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s).filter((e) => e.c.uid !== self.uid).map((e) => e.c.uid), 1, false, 'fate-favored', {}, ['other Entity', 'other Entities']),
+      traitTo(s, self, owner, imagined(s).filter((e) => e.c.uid !== self.uid).map((e) => e.c.uid), 1, false, 'fated', {}, ['other Entity', 'other Entities']),
   },
-  // Familiar Kuro — After a fight: the Entity it attacked gets star-crossed. If it defeats an Entity, it gets +1.
+  // Familiar Kuro — After a fight: the Entity it attacked gets starless. If it defeats an Entity, it gets +1.
   'SOFA-F01': {
-    // HOUSE RULE: only when Kuro attacked; the star-crossed lands even if Kuro lost; "defeats" = wins the fight.
+    // HOUSE RULE: only when Kuro attacked; the starless lands even if Kuro lost; "defeats" = wins the fight.
     afterFight: (s, self, _owner, f) => {
       if (f.role !== 'attacker') return
       if (ownerOf(s, f.foe.uid) !== null) {
-        giveTrait(s, f.foe.uid, 'star-crossed')
-        log(s, `Familiar Kuro: ${nm(f.foe)} gets star-crossed.`)
+        giveTrait(s, f.foe.uid, 'starless')
+        log(s, `Familiar Kuro: ${nm(f.foe)} gets starless.`)
       }
       if (f.won && ownerOf(s, self.uid) !== null) {
         addBonus(s, self.uid, 1)
@@ -399,7 +399,7 @@ export const EFFECTS: Record<string, Effect> = {
       }
     },
   },
-  // Familiar Hiroshi — choose a Fate Chapter 2 Entity you remember; continue this Story with it, it gets fate-favored (or +1).
+  // Familiar Hiroshi — choose a Fate Chapter 2 Entity you remember; continue this Story with it, it gets fated (or +1).
   'SOFA-F02': {
     onEnter: (s, self, owner) => {
       // HOUSE RULE: triggers once on entrance, is optional, and ignores the once-per-turn Story limit.
@@ -407,7 +407,7 @@ export const EFFECTS: Record<string, Effect> = {
       log(s, 'Familiar Hiroshi: may continue this Story with a Fate Chapter 2 Entity from Thoughts.')
       const options = pl.thoughts.filter((c) => card(c).type === 'Entity' && card(c).domain === 'Fate' && card(c).chapter === 2).map((c) => c.uid)
       ask(s, { player: owner, sourceUid: self.uid, zone: 'thoughts', options, min: 0, max: 1, effect: 'hiroshi',
-        prompt: 'Familiar Hiroshi: you may continue this Story with a Fate Chapter 2 Entity. It gets fate-favored (+1 if it has it).' },
+        prompt: 'Familiar Hiroshi: you may continue this Story with a Fate Chapter 2 Entity. It gets fated (+1 if it has it).' },
       'Familiar Hiroshi: no Fate Chapter 2 Entity in Thoughts.')
     },
   },
@@ -428,7 +428,7 @@ export const EFFECTS: Record<string, Effect> = {
     },
   },
   // Hikari Mizuki — When instanced: your Entities can't be deleted until the end of your next turn.
-  // While imagined: your Entities get fate-favored (if they have it, +2 instead).
+  // While imagined: your Entities get fated (if they have it, +2 instead).
   'SOFA-028': {
     onEnter: (s, _self, owner) => {
       // HOUSE RULE: protects the Entities imagined now (UNDELETABLE trait), through global turn s.turn + 2.
@@ -438,37 +438,37 @@ export const EFFECTS: Record<string, Effect> = {
     grant: (field, self) => {
       for (const e of field) {
         if (e.owner !== self.owner) continue
-        if (has(e, 'fate-favored')) e.bonus += 2
-        else grantTo(e, 'fate-favored')
+        if (has(e, 'fated')) e.bonus += 2
+        else grantTo(e, 'fated')
       }
     },
   },
-  // Noboru Amano — When instanced: opponent's Entities get star-crossed; those that have it are deleted instead.
-  // When deleted: one of your Entities gets fate-favored.
+  // Noboru Amano — When instanced: opponent's Entities get starless; those that have it are deleted instead.
+  // When deleted: one of your Entities gets fated.
   'SOFA-029': {
     onEnter: (s, _self, owner) => {
-      log(s, 'Noboru Amano: all opponent’s Entities get star-crossed; those that already have it are deleted.')
-      const foes = imagined(s, other(owner)).map((e) => ({ c: e.c, had: hasTrait(s, e.c.uid, 'star-crossed') }))
+      log(s, 'Noboru Amano: all opponent’s Entities get starless; those that already have it are deleted.')
+      const foes = imagined(s, other(owner)).map((e) => ({ c: e.c, had: hasTrait(s, e.c.uid, 'starless') }))
       for (const { c, had } of foes) {
         if (ownerOf(s, c.uid) === null) continue
         if (had) destroy(s, c.uid)
         else {
-          giveTrait(s, c.uid, 'star-crossed')
-          log(s, `${nm(c)} gets star-crossed.`)
+          giveTrait(s, c.uid, 'starless')
+          log(s, `${nm(c)} gets starless.`)
         }
       }
     },
     onDeleted: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fate-favored', {}, ['of your Entities', 'of your Entities']),
+      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fated', {}, ['of your Entities', 'of your Entities']),
   },
-  // Prima — When instanced: your Entities get timeless and fate-favored; for each they already have, +2 instead.
+  // Prima — When instanced: your Entities get timeless and fated; for each they already have, +2 instead.
   // When deleted: delete all Entities on your field.
   'SOFA-097': {
     onEnter: (s, _self, owner) => {
-      log(s, 'Prima: your Entities get timeless and fate-favored (+2 for each they already have).')
+      log(s, 'Prima: your Entities get timeless and fated (+2 for each they already have).')
       for (const e of imagined(s, owner)) {
-        const had = ['timeless', 'fate-favored'].filter((t) => hasTrait(s, e.c.uid, t))
-        for (const t of ['timeless', 'fate-favored']) if (!had.includes(t)) giveTrait(s, e.c.uid, t)
+        const had = ['timeless', 'fated'].filter((t) => hasTrait(s, e.c.uid, t))
+        for (const t of ['timeless', 'fated']) if (!had.includes(t)) giveTrait(s, e.c.uid, t)
         if (had.length) addBonus(s, e.c.uid, 2 * had.length)
       }
     },
@@ -518,11 +518,11 @@ export const EFFECTS: Record<string, Effect> = {
       'Read the Stars: your Memories are empty.')
     },
   },
-  // Twist of Fate — fate-favored → 1 your Entity. star-crossed → ~1 opponent's Entity.
+  // Twist of Fate — fated → 1 your Entity. starless → ~1 opponent's Entity.
   'SI-C06': {
     onEnter: (s, self, owner) => {
-      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fate-favored', {}, ['of your Entities', 'of your Entities'])
-      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, true, 'star-crossed', {}, ["opponent's Entity", "opponent's Entities"])
+      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fated', {}, ['of your Entities', 'of your Entities'])
+      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, true, 'starless', {}, ["opponent's Entity", "opponent's Entities"])
     },
   },
   // Starfall — flip 3. Your opponent loses 1 Essence for every 2 stars you flipped.

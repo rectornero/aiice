@@ -79,9 +79,9 @@ describe('choices', () => {
   })
 
   it('drops options that left the field before the choice is reached', () => {
-    // A's Noboru deletes B's star-crossed Noboru (which asks B to pick one of [Seiji, Aqua Beat]), then B's star-crossed Seiji
+    // A's Noboru deletes B's starless Noboru (which asks B to pick one of [Seiji, Aqua Beat]), then B's starless Seiji
     let s = table({ field: [['SOFA-025'], ['SOFA-029', 'SOFA-F03', 'SOFA-001']], hand: [['SOFA-029'], []] })
-    s = give(give(s, on(s, 'SOFA-029', 1), 'star-crossed'), on(s, 'SOFA-F03'), 'star-crossed')
+    s = give(give(s, on(s, 'SOFA-029', 1), 'starless'), on(s, 'SOFA-F03'), 'starless')
     s = cont(s, 'SOFA-029', 'SOFA-025')
     expect(s.players[1].stories.map((st) => top(st).cardId)).toEqual(['SOFA-001'])
     expect(s.choices).toHaveLength(1)
@@ -170,17 +170,17 @@ describe('Music', () => {
       .toEqual([0, 1, 0, 1, 0])
   })
 
-  it('Aqua Serenade: any Music Pianist gets brave and fate-favored', () => {
+  it('Aqua Serenade: any Music Pianist gets brave and fated', () => {
     const s = table({ field: [['SOFA-M04', 'SOFA-003'], ['SOFA-002']] })
     const keys = on(s, 'SOFA-002')
-    expect(traitDetails(s, keys)).toEqual([{ name: 'brave', source: 'continuous' }, { name: 'fate-favored', source: 'continuous' }])
+    expect(traitDetails(s, keys)).toEqual([{ name: 'brave', source: 'continuous' }, { name: 'fated', source: 'continuous' }])
     expect(flipsFor(s, s.players[1].stories[0].cards[0])).toBe(2)
     expect(traitsOf(s, on(s, 'SOFA-003'))).toEqual([]) // a Guitarist
   })
 
   it('Aqua Serenade: when deleted, your resonant Entities get +1', () => {
     let s = table({ field: [['SOFA-M04', 'SOFA-003'], ['SOFA-024']], hand: [[], ['SOFA-029']] })
-    s = give(give(s, on(s, 'SOFA-M04'), 'star-crossed'), on(s, 'SOFA-003'), 'resonant')
+    s = give(give(s, on(s, 'SOFA-M04'), 'starless'), on(s, 'SOFA-003'), 'resonant')
     s = structuredClone(s)
     s.active = 1
     s = cont(s, 'SOFA-029', 'SOFA-024')
@@ -229,7 +229,7 @@ describe('Music', () => {
 })
 
 describe('Fate', () => {
-  it('Familiar Raiden: star-crossed → up to 2 opponent’s Entities', () => {
+  it('Familiar Raiden: starless → up to 2 opponent’s Entities', () => {
     let s = play(table({ field: [['SOFA-001'], ['SOFA-M03', 'SOFA-F03', 'SOFA-001']], hand: [['SOFA-024'], []] }), 'SOFA-024')
     const ch = s.choices[0]
     expect(ch).toMatchObject({ min: 0, max: 2 })
@@ -237,25 +237,25 @@ describe('Fate', () => {
     expect(choose(s, 0, ch.options)).toBe(s)
     s = choose(s, 0, ch.options.slice(0, 2))
     const pyro = s.players[1].stories[0].cards[0]
-    expect(hasTrait(s, pyro.uid, 'star-crossed')).toBe(true)
+    expect(hasTrait(s, pyro.uid, 'starless')).toBe(true)
     expect(flipsFor(s, pyro)).toBe(1)
   })
 
-  it('Familiar Takeshi: fate-favored → 1 other Entity', () => {
+  it('Familiar Takeshi: fated → 1 other Entity', () => {
     let s = play(table({ field: [[], ['SOFA-M03']], hand: [['SOFA-025'], []] }), 'SOFA-025')
     expect(s.choices[0].options).toEqual([on(s, 'SOFA-M03')])
     s = choose(s, 0, [on(s, 'SOFA-M03')])
-    expect(hasTrait(s, on(s, 'SOFA-M03'), 'fate-favored')).toBe(true)
+    expect(hasTrait(s, on(s, 'SOFA-M03'), 'fated')).toBe(true)
     const alone = play(table({ hand: [['SOFA-025'], []] }), 'SOFA-025')
     expect(alone.choices).toHaveLength(0)
   })
 
-  it('Familiar Kuro: the Entity it attacked gets star-crossed, win or lose', () => {
+  it('Familiar Kuro: the Entity it attacked gets starless, win or lose', () => {
     let s = table({ field: [['SOFA-F01'], ['SOFA-M03']] })
     s = fight(s, on(s, 'SOFA-F01'), on(s, 'SOFA-M03'))
     expect(s.lastFight?.outcome).toBe('defender')
     expect(s.players[0].stories).toHaveLength(0)
-    expect(hasTrait(s, on(s, 'SOFA-M03'), 'star-crossed')).toBe(true)
+    expect(hasTrait(s, on(s, 'SOFA-M03'), 'starless')).toBe(true)
   })
 
   it('Familiar Kuro: +1 when it defeats an Entity', () => {
@@ -264,16 +264,16 @@ describe('Fate', () => {
     s = fight(s, on(s, 'SOFA-F01'), on(s, 'SOFA-M03'))
     expect(s.lastFight?.outcome).toBe('attacker')
     expect(powerBonus(s, on(s, 'SOFA-F01'))).toBe(4)
-    expect(hasTrait(s, on(s, 'SOFA-001'), 'star-crossed')).toBe(false) // the revealed Entity wasn't attacked
+    expect(hasTrait(s, on(s, 'SOFA-001'), 'starless')).toBe(false) // the revealed Entity wasn't attacked
   })
 
   it('Familiar Kuro: nothing when defending', () => {
     let s = table({ field: [['SOFA-F01'], ['SOFA-M03']] })
     s = fight(s, on(s, 'SOFA-M03'), on(s, 'SOFA-F01'))
-    expect(hasTrait(s, on(s, 'SOFA-M03'), 'star-crossed')).toBe(false)
+    expect(hasTrait(s, on(s, 'SOFA-M03'), 'starless')).toBe(false)
   })
 
-  it('Familiar Hiroshi: continues its Story with a Fate Chapter 2 Entity, which enters with fate-favored', () => {
+  it('Familiar Hiroshi: continues its Story with a Fate Chapter 2 Entity, which enters with fated', () => {
     let s = play(table({ hand: [['SOFA-F02', 'SOFA-028', 'SOFA-M01', 'SOFA-097'], []] }), 'SOFA-F02')
     const ch = s.choices[0]
     expect(ch).toMatchObject({ zone: 'thoughts', min: 0, max: 1 })
@@ -282,18 +282,18 @@ describe('Fate', () => {
     const hikari = on(s, 'SOFA-028')
     expect(s.players[0].stories[0].cards.map((c) => c.cardId)).toEqual(['SOFA-F02', 'SOFA-028'])
     expect(hasTrait(s, hikari, UNDELETABLE)).toBe(true) // Hikari's [B] fired
-    // Hikari already has fate-favored from her own "While imagined" when she lands: +1 instead
+    // Hikari already has fated from her own "While imagined" when she lands: +1 instead
     expect(bonusDetails(s, hikari)).toEqual({ permanent: 1, turn: 0, continuous: 0 })
-    expect(logged(s, 'already has fate-favored: +1 instead')).toBe(true)
+    expect(logged(s, 'already has fated: +1 instead')).toBe(true)
   })
 
-  it('Familiar Hiroshi: gives fate-favored; the player may decline', () => {
+  it('Familiar Hiroshi: gives fated; the player may decline', () => {
     let s = play(table({ hand: [['SOFA-F02', 'SOFA-027'], []] }), 'SOFA-F02')
     const declined = choose(s, 0, [])
     expect(top(declined.players[0].stories[0]).cardId).toBe('SOFA-F02')
     s = choose(s, 0, [inHand(s, 'SOFA-027')])
     const kuro = on(s, 'SOFA-027')
-    expect(traitDetails(s, kuro)).toEqual([{ name: 'fate-favored', source: 'effect' }])
+    expect(traitDetails(s, kuro)).toEqual([{ name: 'fated', source: 'effect' }])
     expect(powerBonus(s, kuro)).toBe(0)
   })
 
@@ -332,46 +332,46 @@ describe('Fate', () => {
     expect(hasTrait(s, beat, UNDELETABLE)).toBe(false)
   })
 
-  it('Hikari Mizuki: your Entities get fate-favored, +2 if they have it', () => {
+  it('Hikari Mizuki: your Entities get fated, +2 if they have it', () => {
     let s = table({ field: [['SOFA-028', 'SOFA-001', 'SOFA-002'], ['SOFA-M03']] })
-    s = give(s, on(s, 'SOFA-001'), 'fate-favored')
+    s = give(s, on(s, 'SOFA-001'), 'fated')
     expect(flipsFor(s, s.players[0].stories[0].cards[0])).toBe(2)
-    expect(traitDetails(s, on(s, 'SOFA-028'))).toEqual([{ name: 'fate-favored', source: 'continuous' }])
+    expect(traitDetails(s, on(s, 'SOFA-028'))).toEqual([{ name: 'fated', source: 'continuous' }])
     expect(powerBonus(s, on(s, 'SOFA-001'))).toBe(2)
-    expect(hasTrait(s, on(s, 'SOFA-M03'), 'fate-favored')).toBe(false)
+    expect(hasTrait(s, on(s, 'SOFA-M03'), 'fated')).toBe(false)
   })
 
-  it('layers: Aqua Serenade’s fate-favored is read by Hikari (+2 to the Pianist)', () => {
+  it('layers: Aqua Serenade’s fated is read by Hikari (+2 to the Pianist)', () => {
     const s = table({ field: [['SOFA-028', 'SOFA-002'], ['SOFA-M04']] })
     expect(powerBonus(s, on(s, 'SOFA-002'))).toBe(2)
-    expect(traitsOf(s, on(s, 'SOFA-002'))).toEqual(['brave', 'fate-favored'])
+    expect(traitsOf(s, on(s, 'SOFA-002'))).toEqual(['brave', 'fated'])
   })
 
-  it('Noboru Amano: star-crossed to the opponent’s Entities, deletes those that have it', () => {
+  it('Noboru Amano: starless to the opponent’s Entities, deletes those that have it', () => {
     let s = table({ field: [['SOFA-025'], ['SOFA-001', 'SOFA-002']], hand: [['SOFA-029'], []] })
-    s = give(s, on(s, 'SOFA-001'), 'star-crossed')
+    s = give(s, on(s, 'SOFA-001'), 'starless')
     s = cont(s, 'SOFA-029', 'SOFA-025')
     expect(s.players[1].stories.map((st) => top(st).cardId)).toEqual(['SOFA-002'])
-    expect(hasTrait(s, on(s, 'SOFA-002'), 'star-crossed')).toBe(true)
-    expect(hasTrait(s, on(s, 'SOFA-029'), 'star-crossed')).toBe(false)
+    expect(hasTrait(s, on(s, 'SOFA-002'), 'starless')).toBe(true)
+    expect(hasTrait(s, on(s, 'SOFA-029'), 'starless')).toBe(false)
   })
 
-  it('Noboru Amano: when deleted, one of your Entities gets fate-favored (owner chooses)', () => {
+  it('Noboru Amano: when deleted, one of your Entities gets fated (owner chooses)', () => {
     let s = table({ field: [['SOFA-029', 'SOFA-001'], [['SOFA-025', 'SOFA-M03']]] })
     s = fight(s, on(s, 'SOFA-M03'), on(s, 'SOFA-029')) // 3 vs 2
     const ch = s.choices[0]
     expect(ch).toMatchObject({ player: 0, min: 1, max: 1, options: [on(s, 'SOFA-001')] })
     s = choose(s, 0, [on(s, 'SOFA-001')])
-    expect(hasTrait(s, on(s, 'SOFA-001'), 'fate-favored')).toBe(true)
+    expect(hasTrait(s, on(s, 'SOFA-001'), 'fated')).toBe(true)
   })
 
-  it('Prima: timeless and fate-favored to your Entities, +2 for each they already have', () => {
+  it('Prima: timeless and fated to your Entities, +2 for each they already have', () => {
     let s = table({ field: [[['SOFA-024', 'SOFA-F03'], 'SOFA-001'], ['SOFA-M03']], hand: [['SOFA-097'], []] })
-    s = give(s, on(s, 'SOFA-001'), 'fate-favored')
+    s = give(s, on(s, 'SOFA-001'), 'fated')
     s = cont(s, 'SOFA-097', 'SOFA-F03')
     const prima = on(s, 'SOFA-097')
-    expect(traitsOf(s, prima)).toEqual(['timeless', 'fate-favored'])
-    expect(traitsOf(s, on(s, 'SOFA-001'))).toEqual(['fate-favored', 'timeless'])
+    expect(traitsOf(s, prima)).toEqual(['timeless', 'fated'])
+    expect(traitsOf(s, on(s, 'SOFA-001'))).toEqual(['fated', 'timeless'])
     expect(powerBonus(s, on(s, 'SOFA-001'))).toBe(2)
     expect(powerBonus(s, prima)).toBe(0)
     expect(hasTrait(s, on(s, 'SOFA-M03'), 'timeless')).toBe(false)
@@ -379,7 +379,7 @@ describe('Fate', () => {
 
   it('Prima: when deleted, deletes all your Entities, through protection and replacement', () => {
     let s = table({ field: [['SOFA-097', ['SOFA-024', 'SOFA-F03'], 'SOFA-001', 'SOFA-027'], ['SOFA-M05', 'SOFA-025']], hand: [[], ['SOFA-029']] })
-    s = give(give(s, on(s, 'SOFA-097'), 'star-crossed'), on(s, 'SOFA-001'), 'timeless')
+    s = give(give(s, on(s, 'SOFA-097'), 'starless'), on(s, 'SOFA-001'), 'timeless')
     s = structuredClone(s)
     s.active = 1
     s = cont(s, 'SOFA-029', 'SOFA-025')

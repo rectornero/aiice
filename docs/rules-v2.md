@@ -179,5 +179,5 @@ Sure vs sure and flip vs flip ties still do nothing. B and C are for reference o
 | B: a defender's sure hit blocks the touch | 42.0% | 58.0% | 45.3% | 15.8 | 3.85 | 0.42 | 23% | 32% |
 | C: +1 to every sure hit | 53.7% | 46.3% | 45.2% | 15.9 | 3.77 | 1.10 | 19% | 22% |
 
-Wording (Nero): the trait "ill-fated" is now **star-crossed** (app texts, logs and code).
+Wording (Nero): the trait "ill-fated" is now **starless**, and "fate-favored" is now **fated**.
 Wording (Nero): the trait "death-defiant" is now **timeless**.

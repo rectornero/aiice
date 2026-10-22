@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { destroy } from './effects'
 import { attackTargets, canChant, flipCards, hasTrait, newGame, reduce, RULES, top, type CardInst, type FightMode, type GameState, type PlayerIdx } from './engine'
 
-// Rules v2 (self-iteration): Chant row, 3 Stories, brave/charming, defender, star-crossed fading, comeback draw.
+// Rules v2 (self-iteration): Chant row, 3 Stories, brave/charming, defender, starless fading, comeback draw.
 
 let n = 0
 const inst = (cardId: string): CardInst => ({ uid: `v${n++}`, cardId })
@@ -106,14 +106,14 @@ describe('fights and traits', () => {
     expect(attackTargets(s, 1).map((st) => top(st).cardId)).toEqual(['SOFA-025'])
   })
 
-  it('star-crossed wears off at the end of its owner’s turn', () => {
+  it('starless wears off at the end of its owner’s turn', () => {
     let s = table({ field: [['SOFA-024'], ['SOFA-001']] })
     const uid = top(s.players[1].stories[0]).uid
-    s.mods[uid] = { bonus: 0, turnBonus: 0, traits: [{ name: 'star-crossed' }] }
+    s.mods[uid] = { bonus: 0, turnBonus: 0, traits: [{ name: 'starless' }] }
     s = reduce(s, { t: 'endTurn' }) // end of A's turn: B's Entity keeps it
-    expect(hasTrait(s, uid, 'star-crossed')).toBe(true)
+    expect(hasTrait(s, uid, 'starless')).toBe(true)
     s = reduce(s, { t: 'endTurn' }) // end of B's turn: gone
-    expect(hasTrait(s, uid, 'star-crossed')).toBe(false)
+    expect(hasTrait(s, uid, 'starless')).toBe(false)
   })
 
   it('a player with no Entity draws 2', () => {

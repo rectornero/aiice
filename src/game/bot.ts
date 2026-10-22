@@ -141,7 +141,7 @@ function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: Play
 
 // ---------- choices ----------
 
-const HARMFUL_WORDS = /star-crossed|delet|doomed|pacifist|inoffensive|forget|discard|\blose|can.?t|−\d|-\d/i
+const HARMFUL_WORDS = /starless|delet|doomed|pacifist|inoffensive|forget|discard|\blose|can.?t|−\d|-\d/i
 /** Whether a choice hurts what it targets. The prompt starts with the card's name ("Familiar Raiden: ..."), skip it. */
 const harmfulChoice = (ch: PendingChoice) => HARMFUL_WORDS.test(ch.prompt.slice(ch.prompt.indexOf(':') + 1))
 
@@ -177,7 +177,7 @@ function smartPicks(s: GameState, ch: PendingChoice): string[] {
     return ranked.slice(0, Math.max(min, Math.min(max, good.length)))
   }
   const cards = [...s.players[p].memories, ...s.players[p].thoughts, ...s.players[p].discard, ...s.players[p].essenceStack.map((e) => e.c)]
-  // "put any on the bottom" (Read the Stars): keep stars on top for flips, send starless cards away
+  // "put any on the bottom" (Read the Stars): keep stars on top for flips, send 0-star cards away
   if (ch.effect === 'bottom') return ch.options.filter((uid) => { const c = cards.find((x) => x.uid === uid); return !!c && cardOf(c).stars === 0 })
   const val = (uid: string) => {
     const c = cards.find((x) => x.uid === uid)

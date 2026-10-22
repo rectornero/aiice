@@ -17,7 +17,7 @@ function table(o: { field?: Pair<string[]>; hand?: Pair<string[]>; memories?: Pa
     pl.stories = (o.field?.[p] ?? []).map((x) => ({ id: `st${n++}`, cards: [inst(x)], startedTurn: 0, movedTurn: 0, attackedTurn: 0 }))
     pl.thoughts = (o.hand?.[p] ?? []).map(inst)
     pl.memories = (o.memories?.[p] ?? []).map(inst)
-    pl.essenceStack = Array.from({ length: RULES.startingEssence }, () => ({ c: inst('SOFA-M03'), up: false }))
+    pl.essenceStack = Array.from({ length: RULES.startingEssence }, () => ({ c: inst('SOFA-010'), up: false }))
     pl.essence = RULES.startingEssence
     pl.lost = 0
     pl.chants = (o.chants?.[p] ?? []).map(inst)
@@ -36,50 +36,59 @@ const fight = (s: GameState, atk: string, def: string, modes: [FightMode, FightM
 
 describe('Chant (row of Words)', () => {
   it('needs Echo − 1 Words in the Chant, one Word per turn', () => {
-    let s = table({ hand: [['SI-C03', 'SI-C05', 'SI-C04'], []], memories: [['SOFA-001', 'SOFA-002', 'SOFA-003', 'SOFA-004'], []] })
-    expect(canChant(s, 0, inHand(s, 'SI-C03'))).toMatch(/Echo 2 needs 1 Word/)
-    s = chant(s, 'SI-C05')
-    expect(s.players[0].chants.map((c) => c.cardId)).toEqual(['SI-C05'])
-    s = reduce(s, { t: 'choose', player: 0, picks: [] })
-    expect(canChant(s, 0, inHand(s, 'SI-C03'))).toBe('One Word per turn.')
+    let s = table({ hand: [['SOFA-044', 'SOFA-043'], []], memories: [['SOFA-001', 'SOFA-002', 'SOFA-003', 'SOFA-004'], []] })
+    expect(canChant(s, 0, inHand(s, 'SOFA-044'))).toMatch(/Echo 2 needs 1 Word/)
+    s = chant(s, 'SOFA-043')
+    expect(s.players[0].chants.map((c) => c.cardId)).toEqual(['SOFA-043'])
+    expect(canChant(s, 0, inHand(s, 'SOFA-044'))).toBe('One Word per turn.')
   })
 
-  it('the third Word completes the Chant: all its Words are forgotten', () => {
-    let s = table({ field: [['SOFA-001'], ['SOFA-024']], hand: [['SI-C04'], []], chants: [['SI-C01', 'SI-C03'], []], memories: [['SOFA-M03'], []] })
-    s = chant(s, 'SI-C04')
+  it('the third Word completes the Chant: all its Words are forgotten (Aria then continues a Story)', () => {
+    let s = table({ field: [['SOFA-010'], ['SOFA-024']], hand: [['SOFA-045'], []], chants: [['SOFA-041', 'SOFA-044'], []], memories: [['SOFA-096', 'SOFA-001'], []] })
+    s = chant(s, 'SOFA-045')
     expect(s.players[0].chants).toHaveLength(0)
-    expect(s.players[0].discard.map((c) => c.cardId).sort()).toEqual(['SI-C01', 'SI-C03', 'SI-C04'])
-    // Grand Finale: +2 this turn, and remember a Music Entity
+    expect(s.players[0].discard.map((c) => c.cardId).sort()).toEqual(['SOFA-041', 'SOFA-044', 'SOFA-045'])
     expect(s.choices[0].effect).toBe('remember')
+    expect(s.choices[0].options).toHaveLength(1) // only the Chapter 3 Music Entity
     s = reduce(s, { t: 'choose', player: 0, picks: s.choices[0].options })
-    expect(s.players[0].thoughts.map((c) => c.cardId)).toEqual(['SOFA-M03'])
-  })
-
-  it('Lullaby makes an opponent’s Entity pacifist through their next turn', () => {
-    let s = table({ field: [['SOFA-001'], ['SOFA-024']], hand: [['SI-C02'], []] })
-    s = chant(s, 'SI-C02')
+    expect(s.choices[0]).toMatchObject({ effect: 'placeOn', zone: 'field', min: 0, max: 1 })
     s = reduce(s, { t: 'choose', player: 0, picks: s.choices[0].options })
-    const raiden = top(on(s, 'SOFA-024')).uid
-    s = reduce(s, { t: 'endTurn' })
-    expect(hasTrait(s, raiden, 'pacifist')).toBe(true)
-    s = reduce(s, { t: 'endTurn' })
-    expect(hasTrait(s, raiden, 'pacifist')).toBe(false)
+    expect(top(on(s, 'SOFA-096')).cardId).toBe('SOFA-096')
+    expect(on(s, 'SOFA-096').cards.map((c) => c.cardId)).toEqual(['SOFA-010', 'SOFA-096'])
   })
 
-  it('Starfall: 1 Essence lost per 2 stars flipped', () => {
-    // Raiden 2★, Hikari 2★, Takeshi 1★ = 5 stars → 2 Essence
-    let s = table({ hand: [['SI-C07'], []], chants: [['SI-C05', 'SI-C06'], []], memories: [['SOFA-024', 'SOFA-028', 'SOFA-025'], []] })
-    s = chant(s, 'SI-C07')
-    expect(s.players[1].essence).toBe(RULES.startingEssence - 2)
+  it('Symphony of Illusion: stealth through the opponent’s turn, so it can’t be attacked', () => {
+    let s = table({ field: [['SOFA-001'], ['SOFA-024']], hand: [['SOFA-042'], []] })
+    s = chant(s, 'SOFA-042')
+    s = reduce(s, { t: 'choose', player: 0, picks: s.choices[0].options })
+    const beat = top(on(s, 'SOFA-001')).uid
+    s = reduce(s, { t: 'endTurn' })
+    expect(hasTrait(s, beat, 'stealth')).toBe(true)
+    expect(attackTargets(s, 0)).toHaveLength(0)
+    s = reduce(s, { t: 'endTurn' })
+    expect(hasTrait(s, beat, 'stealth')).toBe(false)
   })
 
-  it('Read the Stars puts chosen cards on the bottom, then draws', () => {
-    let s = table({ hand: [['SI-C05'], []], memories: [['SOFA-M03', 'SOFA-024', 'SOFA-025', 'SOFA-001'], []] })
-    s = chant(s, 'SI-C05')
-    expect(s.choices[0].options).toHaveLength(3)
-    s = reduce(s, { t: 'choose', player: 0, picks: [s.players[0].memories[0].uid] })
-    expect(s.players[0].thoughts.map((c) => c.cardId)).toEqual(['SOFA-024'])
-    expect(s.players[0].memories.map((c) => c.cardId)).toEqual(['SOFA-025', 'SOFA-001', 'SOFA-M03'])
+  it('Harmony of Healing: Values can’t be revealed until your next turn; its Echo draws 1', () => {
+    let s = table({ field: [['SOFA-010'], ['SOFA-030']], hand: [['SOFA-043'], []], chants: [['SOFA-041'], []], memories: [['SOFA-001', 'SOFA-002'], ['SOFA-001']] })
+    s = chant(s, 'SOFA-043')
+    expect(s.players[0].thoughts.map((c) => c.cardId)).toEqual(['SOFA-001']) // echoed: draw 1
+    s = reduce(s, { t: 'endTurn' })
+    s = reduce(s, { t: 'loseEssence', player: 0 })
+    expect(s.players[0].essence).toBe(RULES.startingEssence)
+    s = reduce(s, { t: 'endTurn' })
+    s = reduce(s, { t: 'loseEssence', player: 0 })
+    expect(s.players[0].essence).toBe(RULES.startingEssence - 1)
+  })
+
+  it('Clear Skies Knowledge: draw 1, forget 1, fated; its Echo does it again', () => {
+    let s = table({ field: [['SOFA-025'], []], hand: [['SOFA-048', 'SOFA-002'], []], chants: [['SOFA-041'], []], memories: [['SOFA-001', 'SOFA-003'], []] })
+    s = chant(s, 'SOFA-048')
+    expect(s.choices.map((c) => c.effect)).toEqual(['forget', 'trait', 'forget', 'trait'])
+    expect(s.players[0].thoughts).toHaveLength(3)
+    while (s.choices.length) s = reduce(s, { t: 'choose', player: 0, picks: s.choices[0].options.slice(0, s.choices[0].min) })
+    expect(s.players[0].thoughts).toHaveLength(1)
+    expect(hasTrait(s, top(on(s, 'SOFA-025')).uid, 'fated')).toBe(true)
   })
 })
 
@@ -167,10 +176,10 @@ describe('V2.2: lost Chapters and a Story laid bare', () => {
   it('a deleted Entity with a Chapter under it stays as a lost Chapter; deleting the last one lays the Story bare', () => {
     const s = table({ field: [[], ['SOFA-001']] })
     const st = s.players[1].stories[0]
-    st.cards.push(inst('SOFA-M01'))
+    st.cards.push(inst('SOFA-012'))
     expect(destroy(s, top(st).uid)).toBe(true)
     expect(st.cards.map((c) => c.cardId)).toEqual(['SOFA-001'])
-    expect(st.lost?.map((c) => c.cardId)).toEqual(['SOFA-M01'])
+    expect(st.lost?.map((c) => c.cardId)).toEqual(['SOFA-012'])
     expect(s.players[1].discard).toHaveLength(0)
     destroy(s, top(st).uid)
     expect(s.players[1].stories).toHaveLength(0)
@@ -189,7 +198,7 @@ describe('V2.2: lost Chapters and a Story laid bare', () => {
 
 describe('V2.3: Memories that touch', () => {
   it('an attacker that flips a Heart card and wins also reveals 1 Value', () => {
-    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [['SOFA-028', 'SOFA-028', 'SOFA-028'], []] })
+    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [['SOFA-025', 'SOFA-025', 'SOFA-025'], []] })
     s = fight(s, 'SOFA-001', 'SOFA-002', ['flip', 'sure'])
     expect(s.lastFight?.outcome).toBe('attacker')
     expect(s.players[1].essenceStack.filter((e) => e.up)).toHaveLength(1)
@@ -208,7 +217,7 @@ describe('V2.4: Change of Values', () => {
   it('(old trigger) a defender that flips a Heart card and wins may put a hand card face down in place of a revealed Value', () => {
     RULES.changeTrigger = 'defender'
     RULES.changeOfValues = true
-    let s = table({ field: [['SOFA-002'], ['SOFA-001']], hand: [[], ['SOFA-004']], memories: [[], ['SOFA-028', 'SOFA-028', 'SOFA-028']] })
+    let s = table({ field: [['SOFA-002'], ['SOFA-001']], hand: [[], ['SOFA-004']], memories: [[], ['SOFA-025', 'SOFA-025', 'SOFA-025']] })
     s.players[1].essenceStack[0].up = true
     s.players[1].essence = 4
     s.players[1].lost = 1
@@ -228,11 +237,11 @@ describe('V2.4: Change of Values', () => {
 
   it('(removed) completing the Chant lets you hide a revealed Value: swap it with a hand card, or turn it back face down', () => {
     RULES.changeOfValues = true
-    let s = table({ hand: [['SI-C03', 'SOFA-004'], []], chants: [['SI-C01', 'SI-C01'], []], memories: [['SOFA-001', 'SOFA-002', 'SOFA-003'], []] })
+    let s = table({ hand: [['SOFA-044', 'SOFA-004'], []], chants: [['SOFA-043', 'SOFA-043'], []], memories: [['SOFA-001', 'SOFA-002', 'SOFA-003'], []] })
     s.players[0].essenceStack[0].up = true
     s.players[0].essence = 4
     s.players[0].lost = 1
-    s = chant(s, 'SI-C03')
+    s = chant(s, 'SOFA-044')
     expect(s.players[0].chants).toHaveLength(0)
     expect(s.choices[0]?.effect).toBe('cov1')
     const v = s.players[0].essenceStack[0].c
@@ -250,7 +259,7 @@ describe('V2.4: Change of Values', () => {
 
 describe('V2.7: running out', () => {
   it('the extra deck becomes Memories, then draws take face-down Values, then you share your Heart', () => {
-    let s = table({ field: [[], ['SOFA-M03']] })
+    let s = table({ field: [[], ['SOFA-010']] })
     const pl = () => s.players[1]
     s.players[1].extra = [inst('SOFA-001')]
     s = reduce(s, { t: 'endTurn' })
@@ -286,12 +295,12 @@ describe('V2.7: thin Memories flip from the Subconscious', () => {
 describe('V2.8: a sure hit wins ties against a flip', () => {
   it('sure vs flip tie goes to the sure hit; sure vs sure is still a tie', () => {
     // Aqua Beat sure 2 vs Sparkle Keys flipping one 2-star card = 2
-    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [[], ['SOFA-028', 'SOFA-028']] })
+    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [[], ['SOFA-003', 'SOFA-003']] })
     s = fight(s, 'SOFA-001', 'SOFA-002', ['sure', 'flip'])
     expect(s.lastFight?.attacker.total).toBe(s.lastFight?.defender.total)
     expect(s.lastFight?.outcome).toBe('attacker')
-    let t = table({ field: [['SOFA-001'], ['SOFA-M01']] })
-    t = fight(t, 'SOFA-001', 'SOFA-M01', ['sure', 'sure'])
+    let t = table({ field: [['SOFA-001'], ['SOFA-025']] })
+    t = fight(t, 'SOFA-001', 'SOFA-025', ['sure', 'sure'])
     expect(t.lastFight?.attacker.total).toBe(t.lastFight?.defender.total)
     expect(t.lastFight?.outcome).toBe('tie')
   })

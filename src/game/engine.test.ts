@@ -42,13 +42,13 @@ describe('engine', () => {
     let s = start()
     s.active = 0
     const ch1 = putInHand(s, 'SOFA-001')
-    const ch2 = putInHand(s, 'SOFA-M01')
+    const ch2 = putInHand(s, 'SOFA-010')
     s = reduce(s, { t: 'imagineNew', uid: ch1 })
     const storyId = s.players[0].stories[0].id
     expect(reduce(s, { t: 'continue', uid: ch2, storyId })).toBe(s) // already moved this turn
     s = reduce(reduce(s, { t: 'endTurn' }), { t: 'endTurn' })
     s = reduce(s, { t: 'continue', uid: ch2, storyId })
-    expect(top(s.players[0].stories[0]).cardId).toBe('SOFA-M01')
+    expect(top(s.players[0].stories[0]).cardId).toBe('SOFA-010')
   })
 
   it('resolves a sure-hit fight and deletes the loser', () => {

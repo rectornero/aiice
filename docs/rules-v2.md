@@ -181,3 +181,18 @@ Sure vs sure and flip vs flip ties still do nothing. B and C are for reference o
 
 Wording (Nero): the trait "ill-fated" is now **starless**, and "fate-favored" is now **fated**.
 Wording (Nero): the trait "death-defiant" is now **timeless**.
+
+## Set 1 (Nero, 2026-10-22): the approved cards, Whisper Words, Relics, Values chosen at setup. App default
+
+The app now plays the approved set 1 (`rules/balance-set1.md` + `conversion/set1-cards.json`): 21 Music and 11 Fate Entities, 10 Words, 5 Relics, with Fate, sure hit, stars 0–2 and Heart marks from the balance table, "resonant" replaced by "Music", and Nero's card art. The 10 numberless Fate drafts and the alt prints stay out until their rules exist. No simulation has been run on set 1.
+
+- **Decks:** 20 main cards with 5 ♥ + a 10-card Subconscious, at most 2 copies across both. New Music and Fate starters follow this.
+- **Setup:** each player chooses 5 cards of their main deck as Values, shuffles the other 15 and draws 5 (second player 6). The simulator and tests still take the top 5.
+- **Traits:** inspiring (draw 1 when it wins a fight), inoffensive (−1 attacking), stealth (can't be attacked), sneaky (can attack the player unless a defender stands), dual-striker (attacks twice a turn), "counts as Music" (Earthy Strums).
+- **Whisper Words** (Rhapsody of Courage, Symphony of Illusion, Crescendo of Chaos, Storm Dragon Roar, The Way of the Sword): played from Thoughts in the fight window, before the player chooses sure hit or flip (the attacker first, then the defender), one per player per fight; the effect happens and the Word goes to the Reverie. They can also go into the Chant like any Word. HOUSE RULE: Whispers only matter in fights, so the app offers them only there.
+- **Echo:** a Word that lands after another Word in the same Chant echoes, and its "Echo:" part happens (HOUSE RULE until the rulebook defines it). Kazuki's "when you Echo" uses the same moment.
+- **Relics:** equipped from Thoughts in the Main step onto one of your Stories; 1 per Story (a new one forgets the old); they power whichever Entity is on top, stay through Chapter changes, and are forgotten when the Story empties. Devil Drinker can be equipped from the Reverie.
+- **Shields** (Harmony of Healing, Fallen's Shield) stop hits, Heart hits included. HOUSE RULE: not the costs a player pays themselves (Devil Drinker, timeless, Kurogane, Fallen's Shield's own reveal).
+- **"Before a fight" abilities** (Terra Harmonia) are used in the same fight window as Whispers; fight-only bonuses end with the fight.
+- **Reverie:** the discard pile is called the Reverie in the app.
+- **Not yet:** Scapes (no Scape cards exist), Axel Ironheart's Metal Saxophone (not in the set), the drafts' traits (ethereal, dual-guarder, doomed, sure gamble).

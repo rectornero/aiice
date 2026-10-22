@@ -167,7 +167,7 @@ export function forgetSavedRoom(kv: KV | null = defaultStorage()) {
 // ---------- rules for accepting an action ----------
 
 function startState(room: Room): GameState {
-  return newGame({ seed: room.seed, decks: room.decks, names: room.names })
+  return newGame({ seed: room.seed, decks: room.decks, names: room.names, chooseValues: true })
 }
 
 /** Why `seat` may not send `a` in state `s`, or null if it may (it must also change the state). */
@@ -179,7 +179,7 @@ export function refuse(s: GameState, a: Action, seat: PlayerIdx): string | null 
     if (!s.lastFight) return 'Nothing to clear.'
   } else {
     if (whoMustAct(s) !== seat) return 'Not your turn.'
-    if ((a.t === 'chooseMode' || a.t === 'choose') && a.player !== seat) return 'Not your choice.'
+    if ((a.t === 'chooseMode' || a.t === 'choose' || a.t === 'whisper') && a.player !== seat) return 'Not your choice.'
   }
   try {
     return reduce(s, a) === s ? 'Not allowed right now.' : null

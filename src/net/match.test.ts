@@ -91,9 +91,10 @@ function play(n: number, host: Match, guest: Match, rnd: () => number) {
   }
 }
 
-/** Play until the host must act. */
+/** Play until the host must act (after both players have set their Values). */
 function toHostTurn(host: Match, guest: Match, rnd: () => number) {
-  for (let i = 0; i < 100 && whoMustAct(host.state()!) !== host.localSeat(); i++) play(1, host, guest, rnd)
+  const settingUp = () => host.state()!.choices.some((c) => c.effect === 'values')
+  for (let i = 0; i < 100 && (whoMustAct(host.state()!) !== host.localSeat() || settingUp()); i++) play(1, host, guest, rnd)
   expect(whoMustAct(host.state()!)).toBe(host.localSeat())
 }
 

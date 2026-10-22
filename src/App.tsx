@@ -79,7 +79,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
   return (
     <div className="menu">
       <h1>AI·ICE</h1>
-      <p className="muted">Self-iteration build · rules v2 (experimental) · first set SOFA + new Words</p>
+      <p className="muted">Prototype table · rules v2 · first set SOFA + new Words</p>
 
       <div className="panel">
         <h2>Play</h2>

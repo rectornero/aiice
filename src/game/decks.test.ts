@@ -44,9 +44,9 @@ describe('storage', () => {
   })
 
   it('ignores broken stored data', () => {
-    localStorage.setItem('ai-ice.si.decks.v1', '{not json')
+    localStorage.setItem('ai-ice.decks.v1', '{not json')
     expect(savedDecks()).toEqual([])
-    localStorage.setItem('ai-ice.si.decks.v1', JSON.stringify([{ id: 'a', name: 'ok', cards: ['SOFA-001'] }, { id: 1 }, null]))
+    localStorage.setItem('ai-ice.decks.v1', JSON.stringify([{ id: 'a', name: 'ok', cards: ['SOFA-001'] }, { id: 1 }, null]))
     expect(savedDecks().map((d) => d.id)).toEqual(['a'])
   })
 

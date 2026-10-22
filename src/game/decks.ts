@@ -29,8 +29,7 @@ export const DECK_RULES = {
   minChapter1: 6,
 } as const
 
-// V2 fork: its own storage key, so decks saved in the Platform app aren't mixed with this one's card pool
-const STORAGE_KEY = 'ai-ice.si.decks.v1'
+const STORAGE_KEY = 'ai-ice.decks.v1'
 
 export function starterDecks(): Deck[] {
   return Object.entries(STARTER_DECKS).map(([id, d]) => ({ id, name: d.name, cards: [...d.cards], starter: true }))

@@ -154,7 +154,7 @@ export function activate(s: GameState, c: CardInst, owner: PlayerIdx) {
 
 /** The one deletion path: protection, then replacements, then "When deleted" and forget triggers.
  *  Returns true if the Entity really left the field. */
-export function destroy(s: GameState, uid: string): boolean {
+export function destroy(s: GameState, uid: string, byFoe = true): boolean {
   if (s.winner !== null) return false
   const p = ownerOf(s, uid)
   if (p === null) return false
@@ -173,7 +173,7 @@ export function destroy(s: GameState, uid: string): boolean {
     loseEssence(s, p, 1, nm(c))
     return false
   }
-  removeTop(s, p, story.id)
+  removeTop(s, p, story.id, byFoe)
   EFFECTS[c.cardId]?.onDeleted?.(s, c, p)
   forgotten(s, c)
   return true
@@ -318,7 +318,7 @@ export const EFFECTS: Record<string, Effect> = {
     onOtherForgotten: (s, self) => {
       if (ownerOf(s, self.uid) === null) return
       log(s, 'Luna Harmonia: another Entity was forgotten, so she goes too.')
-      destroy(s, self.uid)
+      destroy(s, self.uid, false)
     },
     boost: (field) => {
       for (const e of field) if (has(e, 'resonant')) e.bonus += 2
@@ -426,7 +426,7 @@ export const EFFECTS: Record<string, Effect> = {
       // HOUSE RULE: deletes the Entities imagined when it resolves (incl. the one revealed under Prima);
       // Entities revealed by these deletions stay.
       log(s, `Prima: delete all Entities on ${s.players[owner].name}'s field.`)
-      for (const e of imagined(s, owner)) destroy(s, e.c.uid)
+      for (const e of imagined(s, owner)) destroy(s, e.c.uid, false)
     },
   },
   // Kazuki Amagiri — When instanced: Remember 1 Word [Domain: Fate, Echo: 2]

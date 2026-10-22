@@ -101,6 +101,8 @@ function storyValue(s: GameState, p: PlayerIdx, st: Story) {
   if (/When deleted: delete all/i.test(cardOf(c).text)) v += 2 * (s.players[p].stories.length - 1) + 2
   // losing your last Entity opens you to direct attacks
   if (st.cards.length === 1 && s.players[p].stories.length === 1) v += 3
+  // V2.2: a Story laid bare reaches the Essence
+  if (RULES.storyLaidBare && st.cards.length === 1 && st.lost?.length) v += s.players[p].essence <= 0 ? 100 : 12 / (s.players[p].essence + 1) + 2
   return v
 }
 

@@ -49,3 +49,14 @@ Notes from the variant runs: removing Fate's Words made Fate win 83% (its first 
 
 ## v2.1 simulation (Values and Heart)
 Value cards come out of the 20-card deck, which cost Music a few percent; its starter deck now runs 3 Tuning Hum and 3 Aqua Beat (instead of Lullaby and Blazing Melody). 1000 games: Music 45%, Fate 52%, draws 3%, first player 54%.
+
+## v2.2: lost Chapters and a Story laid bare (Nero, 2026-10-22, rulebook §6)
+
+- A deleted top Entity falls back a Chapter. If it had a Chapter under it, it stays face down under its Story as a lost Chapter.
+- Deleting the last face-up Entity of an opponent's Story that has lost Chapters lays the Story bare: it empties, reaches its owner's Essence (reveal 1 Value), and its cards go to discard. A lone Chapter 1 with no lost Chapters doesn't count.
+- Sim, 1000 games, starter decks (bot knows laid-bare Stories are worth attacking):
+
+| rules | Music | Fate | draws | 1st player | turns | winner's face-down Values | Heart reached | laid bare per game |
+|---|---|---|---|---|---|---|---|---|
+| v2.1 | 42.7% | 54.1% | 3.2% | 55.5% | 18.5 | 4.20 | 100% of decided | 0 |
+| v2.2 | 44.1% | 51.9% | 4.0% | 55.9% | 18.1 | 4.09 | 100% of decided | 1.48 |

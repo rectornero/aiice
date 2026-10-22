@@ -46,6 +46,10 @@ export const RULES = {
   /** V2.1 (Nero, 2026-10-22): "5 Values and one Heart". Essence is now called Values; with no face-down Value left,
    *  the next hit reaches the Heart and ends the game. Off: you lose when the last Value is lost. */
   heart: true,
+  /** V2.2 (Nero, 2026-10-22, rulebook §6): a deleted Entity with a Chapter under it goes face down under its Story
+   *  (a lost Chapter). Deleting the last face-up Entity of an opponent's Story with lost Chapters lays it bare:
+   *  the Story empties and reaches its owner's Essence (reveal 1 Value). */
+  storyLaidBare: true,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -93,6 +97,8 @@ export interface Story {
   /** last turn this Story was started or continued (each Story moves once per turn) */
   movedTurn: number
   attackedTurn: number
+  /** V2.2: lost Chapters, face down under the Story */
+  lost?: CardInst[]
 }
 
 export interface PlayerState {
@@ -447,17 +453,28 @@ function heartHit(s: GameState, p: PlayerIdx) {
     : `${s.players[p].name} has no Values left. ${s.players[other(p)].name} wins!`)
 }
 
-/** Raw delete of a Story's top Entity: no protection, replacement or trigger (see effects.ts destroy). */
-export function removeTop(s: GameState, p: PlayerIdx, storyId: string) {
+/** Raw delete of a Story's top Entity: no protection, replacement or trigger (see effects.ts destroy).
+ *  byFoe: the opponent deleted it (a fight or their effect), which can lay the Story bare. */
+export function removeTop(s: GameState, p: PlayerIdx, storyId: string, byFoe = false) {
   const pl = s.players[p]
   const story = pl.stories.find((st) => st.id === storyId)
   if (!story) return
   const gone = story.cards.pop()!
   delete s.mods[gone.uid]
-  pl.discard.push(gone)
-  // HOUSE RULE (rulebook [open]): the Story falls back one Chapter; the Entity below is imagined again.
-  if (story.cards.length === 0) pl.stories = pl.stories.filter((st) => st.id !== storyId)
   log(s, `${cardName(card(gone))} is deleted.`)
+  // V2.2 (rulebook §6): the Story falls back a Chapter; the deleted Entity stays under it as a lost Chapter.
+  if (RULES.storyLaidBare && story.cards.length > 0) (story.lost ??= []).push(gone)
+  else pl.discard.push(gone)
+  if (story.cards.length > 0) return
+  pl.stories = pl.stories.filter((st) => st.id !== storyId)
+  const lost = story.lost ?? []
+  if (!lost.length) return
+  pl.discard.push(...lost)
+  story.lost = []
+  if (byFoe && s.winner === null) {
+    log(s, `${pl.name}'s Story is laid bare: it reaches ${pl.name}'s Essence!`)
+    loseEssence(s, p, 1, `${cardName(card(gone))}'s Story`)
+  }
 }
 
 function clone(s: GameState): GameState {

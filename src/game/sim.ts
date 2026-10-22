@@ -18,6 +18,10 @@ export interface GameRecord {
   turns: number
   winnerEssence: number
   actions: number
+  /** the game ended on a hit to the Heart */
+  heart: boolean
+  /** Essence hits that came from a Story laid bare (V2.2) */
+  laidBare: number
   /** times each card entered the field (started or continued a Story) */
   played: Record<string, number>
 }
@@ -40,6 +44,7 @@ export function playGame(opts: {
   const played: Record<string, number> = {}
   let onField = new Set<string>()
   let actions = 0
+  let laidBare = 0
   while (s.winner === null && s.turn <= maxTurns) {
     const p = whoMustAct(s)
     if (p === null) break
@@ -49,6 +54,7 @@ export function playGame(opts: {
     if (next === s) throw new Error(`Bot ${p} returned an illegal action on turn ${s.turn}: ${JSON.stringify(a)}`)
     if (++actions > MAX_ACTIONS) throw new Error(`Game seed ${opts.seed} exceeded ${MAX_ACTIONS} actions`)
     opts.onAction?.(s, a, next)
+    if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.source?.endsWith("'s Story")) laidBare++
     const now = new Set<string>()
     for (const pl of next.players) for (const st of pl.stories) for (const c of st.cards) {
       now.add(c.uid)
@@ -65,6 +71,8 @@ export function playGame(opts: {
     turns: Math.min(s.turn, maxTurns),
     winnerEssence: w === null ? 0 : s.players[w].essence,
     actions,
+    heart: w !== null && !!s.lastHit?.heart,
+    laidBare,
     played,
   }
 }
@@ -81,20 +89,28 @@ export interface SimStats {
   avgWinnerEssence: number
   /** share of decided games won by the player who went first */
   firstPlayerWinRate: number
+  /** share of decided games that ended on the Heart */
+  heartRate: number
+  /** Stories laid bare per game */
+  laidBarePerGame: number
   /** times each card entered the field, over all games */
   played: Record<string, number>
 }
 
 /** Plays `games` bot-vs-bot games. Seats alternate every game so both decks sit in both seats. */
 export function simulate(opts: { games: number; seed: number; decks: [string[], string[]]; levels?: [BotLevel, BotLevel]; maxTurns?: number }): SimStats {
-  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, played: {} }
+  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, played: {} }
   let turns = 0
   let essence = 0
   let firstWins = 0
+  let hearts = 0
+  let bare = 0
   for (let g = 0; g < opts.games; g++) {
     const seed = (Math.imul(opts.seed ^ 0x5bd1e995, 31) + Math.imul(g + 1, 0x9e3779b1)) | 0
     const r = playGame({ seed, decks: opts.decks, levels: opts.levels ?? ['normal', 'normal'], swap: g % 2 === 1, maxTurns: opts.maxTurns })
     turns += r.turns
+    bare += r.laidBare
+    if (r.heart) hearts++
     for (const [id, n] of Object.entries(r.played)) st.played[id] = (st.played[id] ?? 0) + n
     if (r.winnerDeck === null || r.winnerSeat === null) {
       st.draws++
@@ -109,6 +125,8 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   st.avgTurns = opts.games ? turns / opts.games : 0
   st.avgWinnerEssence = decided ? essence / decided : 0
   st.firstPlayerWinRate = decided ? firstWins / decided : 0
+  st.heartRate = decided ? hearts / decided : 0
+  st.laidBarePerGame = opts.games ? bare / opts.games : 0
   return st
 }
 
@@ -124,6 +142,7 @@ export function formatReport(st: SimStats, deckNames: [string, string], levels: 
     `  seat 0 / seat 1 wins: ${st.winsBySeat[0]} / ${st.winsBySeat[1]}`,
     `  first player wins ${pct(Math.round(st.firstPlayerWinRate * decided), decided)} of decided games`,
     `  average length ${st.avgTurns.toFixed(1)} turns, winner keeps ${st.avgWinnerEssence.toFixed(2)} Values on average`,
+    `  Heart reached in ${(100 * st.heartRate).toFixed(1)}% of decided games, ${st.laidBarePerGame.toFixed(2)} Stories laid bare per game`,
     `  cards played (entered the field), per game:`,
     ...Object.entries(st.played)
       .sort((a, b) => b[1] - a[1])

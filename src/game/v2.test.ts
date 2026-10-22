@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { destroy } from './effects'
 import { attackTargets, canChant, hasTrait, newGame, reduce, RULES, top, type CardInst, type FightMode, type GameState, type PlayerIdx } from './engine'
 
 // Rules v2 (self-iteration): Chant row, 3 Stories, brave/charming, defender, ill-fated fading, comeback draw.
@@ -159,5 +160,29 @@ describe('Values and Heart (v2.1)', () => {
     s = reduce(s, { t: 'toFight' })
     s = reduce(s, { t: 'attack', storyId: s.players[0].stories[0].id, target: 'player' })
     expect(s.winner).toBe(0)
+  })
+})
+
+describe('V2.2: lost Chapters and a Story laid bare', () => {
+  it('a deleted Entity with a Chapter under it stays as a lost Chapter; deleting the last one lays the Story bare', () => {
+    const s = table({ field: [[], ['SOFA-001']] })
+    const st = s.players[1].stories[0]
+    st.cards.push(inst('SOFA-M01'))
+    expect(destroy(s, top(st).uid)).toBe(true)
+    expect(st.cards.map((c) => c.cardId)).toEqual(['SOFA-001'])
+    expect(st.lost?.map((c) => c.cardId)).toEqual(['SOFA-M01'])
+    expect(s.players[1].discard).toHaveLength(0)
+    destroy(s, top(st).uid)
+    expect(s.players[1].stories).toHaveLength(0)
+    expect(s.players[1].discard).toHaveLength(2)
+    expect(s.players[1].essenceStack.filter((e) => e.up)).toHaveLength(1)
+    expect(s.log.some((l) => /laid bare/.test(l))).toBe(true)
+  })
+
+  it('a lone Chapter 1 with no lost Chapters does not reach the Essence', () => {
+    const s = table({ field: [[], ['SOFA-001']] })
+    destroy(s, top(s.players[1].stories[0]).uid)
+    expect(s.players[1].stories).toHaveLength(0)
+    expect(s.players[1].essenceStack.filter((e) => e.up)).toHaveLength(0)
   })
 })

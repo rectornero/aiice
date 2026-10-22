@@ -79,7 +79,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
   return (
     <div className="menu">
       <h1>AI·ICE</h1>
-      <p className="muted">Self-iteration build · rules v2 (experimental) · first set SOFA + new Chants</p>
+      <p className="muted">Self-iteration build · rules v2 (experimental) · first set SOFA + new Words</p>
 
       <div className="panel">
         <h2>Play</h2>
@@ -119,9 +119,9 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
         <summary>How this table plays (rules used)</summary>
         <ul>
           <li>5 Essence each, 5 cards in Thoughts, draw 1 per turn (the first player skips turn 1's draw). If you imagine no Entity at the start of your turn, draw 2.</li>
-          <li><b>Each player has two rows of 3 slots:</b> Stories (Entities) and the green <b>Chant row</b>.</li>
+          <li><b>Each player has two rows of 3 slots:</b> Stories (Entities) and your <b>Chant</b>, a row of green <b>Word</b> cards.</li>
           <li><b>Main:</b> imagine a Chapter 1 Entity to start a Story (max 3), or put the next Chapter on top of a Story. Each Story moves once per turn.</li>
-          <li><b>Chant</b> one green card per turn. Its top-right number is its <b>Echo</b>: Echo 2 needs 1 Chant already in your row, Echo 3 needs 2. When the 3rd Chant lands, the Phrase is complete and the whole row is forgotten.</li>
+          <li>Add one <b>Word</b> per turn to your Chant. Its top-right number is its <b>Echo</b>: Echo 2 needs 1 Word already in your Chant, Echo 3 needs 2. When the 3rd Word lands, the Chant is complete and all its Words are forgotten.</li>
           <li><b>Fight:</b> each imagined Entity attacks once, not on the turn its Story started. Both players choose: <b>sure hit</b>, or <b>flip</b> Fate cards from Memories and count ★. Higher total wins; the loser is deleted. Ties: nothing happens.</li>
           <li><b>Traits:</b> brave +1 when attacking · charming +1 when defending · defender must be attacked first · pacifist can't attack · fate-favored flips 1 more · ill-fated flips 1 fewer and wears off at the end of its owner's turn.</li>
           <li>If the opponent imagines no Entity, attack them directly: they lose 1 Essence. 0 Essence = you lose.</li>

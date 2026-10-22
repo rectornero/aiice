@@ -274,7 +274,7 @@ function activationHelps(s: GameState, p: PlayerIdx, uid: string) {
   return ch.options.some((o) => (ownerOf(next, o) === p) !== harmful)
 }
 
-/** Chants worth chanting now, highest Echo first; one that asks for targets needs a good one. */
+/** Words worth adding to the Chant now, highest Echo first; one that asks for targets needs a good one. */
 function goodChants(s: GameState, p: PlayerIdx): Action[] {
   const out: { a: Action; v: number }[] = []
   for (const c of s.players[p].thoughts) {

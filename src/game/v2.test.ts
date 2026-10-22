@@ -30,17 +30,17 @@ const fight = (s: GameState, atk: string, def: string, modes: [FightMode, FightM
   return reduce(s, { t: 'chooseMode', player: 1, mode: modes[1] })
 }
 
-describe('Chant row', () => {
-  it('needs Echo − 1 Chants in the row, one Chant per turn', () => {
+describe('Chant (row of Words)', () => {
+  it('needs Echo − 1 Words in the Chant, one Word per turn', () => {
     let s = table({ hand: [['SI-C03', 'SI-C05', 'SI-C04'], []], memories: [['SOFA-001', 'SOFA-002', 'SOFA-003', 'SOFA-004'], []] })
-    expect(canChant(s, 0, inHand(s, 'SI-C03'))).toMatch(/Echo 2 needs 1 Chant/)
+    expect(canChant(s, 0, inHand(s, 'SI-C03'))).toMatch(/Echo 2 needs 1 Word/)
     s = chant(s, 'SI-C05')
     expect(s.players[0].chants.map((c) => c.cardId)).toEqual(['SI-C05'])
     s = reduce(s, { t: 'choose', player: 0, picks: [] })
-    expect(canChant(s, 0, inHand(s, 'SI-C03'))).toBe('One Chant per turn.')
+    expect(canChant(s, 0, inHand(s, 'SI-C03'))).toBe('One Word per turn.')
   })
 
-  it('the third Chant completes the Phrase: the whole row is forgotten', () => {
+  it('the third Word completes the Chant: all its Words are forgotten', () => {
     let s = table({ field: [['SOFA-001'], ['SOFA-024']], hand: [['SI-C04'], []], chants: [['SI-C01', 'SI-C03'], []], memories: [['SOFA-M03'], []] })
     s = chant(s, 'SI-C04')
     expect(s.players[0].chants).toHaveLength(0)

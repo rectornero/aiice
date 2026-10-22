@@ -24,9 +24,9 @@ export const RULES = {
   openingHand: 5,
   /** V2: 3 Stories (was 5): fits 3 slots per row on a phone and slows down wide-board snowballs. */
   maxStories: 3,
-  /** V2: the Chant row (green cards) holds up to this many Chants; the 3rd one completes the Phrase. */
+  /** V2: your Chant (a row of green Word cards) holds up to this many Words; the 3rd one completes it. */
   maxChants: 3,
-  /** V2: when the Chant row is full, the Phrase is complete and all its Chants are forgotten. */
+  /** V2: when the Chant is full, it is complete and all its Words are forgotten. */
   phraseClears: true,
   /** V2: brave = +1 when attacking. charming = +1 when defending. */
   braveCharming: true,
@@ -96,9 +96,9 @@ export interface PlayerState {
   memories: CardInst[]
   thoughts: CardInst[]
   stories: Story[]
-  /** V2: the Chant row, oldest first (the Phrase being spelled) */
+  /** V2: the Chant: Words in the order they were added */
   chants: CardInst[]
-  /** last turn this player played a Chant (one per turn) */
+  /** last turn this player added a Word to their Chant (one per turn) */
   chantedTurn: number
   discard: CardInst[]
 }
@@ -306,16 +306,16 @@ export function canAttack(s: GameState, story: Story): string | null {
   return null
 }
 
-/** V2: can the player chant this card now? An Echo N Chant needs at least N − 1 Chants already in the row. */
+/** V2: can the player add this Word to their Chant now? An Echo N Word needs at least N − 1 Words already in it. */
 export function canChant(s: GameState, p: PlayerIdx, c: CardInst): string | null {
   const k = card(c)
   const pl = s.players[p]
-  if (k.type !== 'Chant') return 'Not a Chant.'
-  if (s.active !== p || s.phase !== 'main') return 'Chant in your Main step.'
-  if (pl.chantedTurn === s.turn) return 'One Chant per turn.'
-  if (pl.chants.length >= RULES.maxChants) return 'Your Chant row is full.'
+  if (k.type !== 'Word') return 'Not a Word.'
+  if (s.active !== p || s.phase !== 'main') return 'Add Words in your Main step.'
+  if (pl.chantedTurn === s.turn) return 'One Word per turn.'
+  if (pl.chants.length >= RULES.maxChants) return 'Your Chant is full.'
   const need = (k.echo ?? 1) - 1
-  if (pl.chants.length < need) return `Echo ${k.echo} needs ${need} Chant${need === 1 ? '' : 's'} in your row first.`
+  if (pl.chants.length < need) return `Echo ${k.echo} needs ${need} Word${need === 1 ? '' : 's'} in your Chant first.`
   return null
 }
 
@@ -489,10 +489,10 @@ function step(s: GameState, a: Action): boolean {
       pl.thoughts = pl.thoughts.filter((x) => x.uid !== a.uid)
       pl.chants.push(c)
       pl.chantedTurn = s.turn
-      log(s, `${pl.name} chants ${card(c).name} (Echo ${card(c).echo ?? 1}).`)
+      log(s, `${pl.name} adds ${card(c).name} (Echo ${card(c).echo ?? 1}) to their Chant.`)
       enter(s, c, me)
       if (RULES.phraseClears && pl.chants.length >= RULES.maxChants && s.winner === null) {
-        log(s, `${pl.name}'s Phrase is complete: ${pl.chants.map((x) => card(x).name).join(', ')} are forgotten.`)
+        log(s, `${pl.name}'s Chant is complete: ${pl.chants.map((x) => card(x).name).join(', ')} are forgotten.`)
         pl.discard.push(...pl.chants)
         pl.chants = []
       }

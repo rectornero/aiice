@@ -15,7 +15,7 @@ export type CardSort = 'set' | 'chapter' | 'name'
 
 export const NO_FILTER: CardFilter = { domain: 'All', chapter: 'All', type: 'All', q: '' }
 const DOMAINS: CardFilter['domain'][] = ['All', 'Music', 'Fate', 'Nature']
-const TYPES: CardFilter['type'][] = ['All', 'Entity', 'Chant', 'Relic']
+const TYPES: CardFilter['type'][] = ['All', 'Entity', 'Word', 'Relic']
 const CHAPTERS = [...new Set(CARDS.filter((c) => c.type === 'Entity').map((c) => c.chapter))].sort((a, b) => a - b)
 
 const bySet = (a: Card, b: Card) => a.id.localeCompare(b.id, undefined, { numeric: true })

@@ -23,7 +23,7 @@ import sofa004 from '../assets/cards/sofa004.webp'
 import sofa005 from '../assets/cards/sofa005.webp'
 
 export type Domain = 'Music' | 'Fate' | 'Nature'
-export type CardType = 'Entity' | 'Chant' | 'Relic'
+export type CardType = 'Entity' | 'Word' | 'Relic'
 
 export interface Card {
   id: string
@@ -31,9 +31,9 @@ export interface Card {
   title?: string
   type: CardType
   domain: Domain
-  /** Entities: Chapter (top-right number). Chants and Relics: 0 */
+  /** Entities: Chapter (top-right number). Words and Relics: 0 */
   chapter: number
-  /** Chants (green cards): Echo, the top-right number. An Echo N Chant needs N − 1 Chants already in your Chant row. */
+  /** Words (green cards): Echo, the top-right number. An Echo N Word needs N − 1 Words already in your Chant. */
   echo?: number
   /** placeholder art: a game-icons.net icon name (see src/assets/icons/CREDITS.md) */
   icon?: string
@@ -60,7 +60,7 @@ export const CARDS: Card[] = [
   { id: 'SOFA-003', icon: 'guitar', name: 'Earthy Strums', title: 'Natural Guitarist', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 2, uses: 1,
     text: '[O]: {1} resonant → 1 Entity [Domain: Music]', flavor: 'I don’t want anyone to be hurt..!', image: sofa003 },
   { id: 'SOFA-004', icon: 'violin', name: 'Dreaming Violinist', title: '(name to come)', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 2, placeholder: true,
-    text: '[B]: Remember 1 Chant [Domain: Music, Echo: 1]', flavor: 'My dream is playing all together... it feels like love...', image: sofa004 },
+    text: '[B]: Remember 1 Word [Domain: Music, Echo: 1]', flavor: 'My dream is playing all together... it feels like love...', image: sofa004 },
   { id: 'SOFA-005', icon: 'hummingbird', name: 'Blazing Melody', title: 'Fiery Songbird', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 1, uses: 1,
     text: '[O]: {1} brave → 3 Entities [1 turn]', flavor: 'What’s up? You worried? We’ll make it! I’ll be with you!', image: sofa005 },
   { id: 'SOFA-M01', icon: 'lightning-saber', name: 'Volt Strummer', title: 'Thunderblade Idol', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 2, stars: 1,
@@ -101,22 +101,22 @@ export const CARDS: Card[] = [
     text: 'When instanced: give all your Entities death-defiant and fate-favored; for each they already have, +2 instead. When deleted: delete all Entities on your field.',
     flavor: 'I must keep what’s precious for them... for as long as it’s needed.', image: prima },
   { id: 'SOFA-F04', icon: 'wizard-face', name: 'Kazuki Amagiri', title: 'Magister Magician', type: 'Entity', domain: 'Fate', chapter: 3, fate: 3, sure: 2, stars: 1,
-    text: 'When instanced: Remember 1 Chant [Domain: Fate, Echo: 2].', flavor: 'Luck? It’s all about weaving our skills with opportunity.' },
+    text: 'When instanced: Remember 1 Word [Domain: Fate, Echo: 2].', flavor: 'Luck? It’s all about weaving our skills with opportunity.' },
 
-  // ---- Chants (green). SELF-ITERATION: new cards, placeholder names and texts ----
-  { id: 'SI-C01', name: 'Tuning Hum', type: 'Chant', domain: 'Music', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 2, icon: 'sing',
+  // ---- Words (green, played into your Chant). SELF-ITERATION: new cards, placeholder names and texts ----
+  { id: 'SI-C01', name: 'Tuning Hum', type: 'Word', domain: 'Music', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 2, icon: 'sing',
     text: '[B]: resonant → ~2 your Entities [Domain: Music]', flavor: 'Hmm... hmm-hmm. There. Now we’re in tune.' },
-  { id: 'SI-C02', name: 'Lullaby', type: 'Chant', domain: 'Music', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 1, icon: 'lyre',
+  { id: 'SI-C02', name: 'Lullaby', type: 'Word', domain: 'Music', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 1, icon: 'lyre',
     text: '[B]: pacifist → 1 opponent’s Entity [until the end of their next turn]', flavor: 'Shh... the fight can wait for tomorrow.' },
-  { id: 'SI-C03', name: 'Rising Chorus', type: 'Chant', domain: 'Music', chapter: 0, echo: 2, fate: 0, sure: 0, stars: 1, icon: 'musical-notes',
+  { id: 'SI-C03', name: 'Rising Chorus', type: 'Word', domain: 'Music', chapter: 0, echo: 2, fate: 0, sure: 0, stars: 1, icon: 'musical-notes',
     text: '[B]: brave → ~3 your Entities [1 turn]. Your resonant Entities get +1.', flavor: 'One voice is a wish. Many voices are a promise.' },
-  { id: 'SI-C04', name: 'Grand Finale', type: 'Chant', domain: 'Music', chapter: 0, echo: 3, fate: 0, sure: 0, stars: 0, icon: 'musical-score',
+  { id: 'SI-C04', name: 'Grand Finale', type: 'Word', domain: 'Music', chapter: 0, echo: 3, fate: 0, sure: 0, stars: 0, icon: 'musical-score',
     text: '[B]: your Entities get +2 [1 turn]. Remember 1 Entity [Domain: Music].', flavor: 'Encore! Encore!' },
-  { id: 'SI-C05', name: 'Read the Stars', type: 'Chant', domain: 'Fate', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 2, icon: 'stars-stack',
+  { id: 'SI-C05', name: 'Read the Stars', type: 'Word', domain: 'Fate', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 2, icon: 'stars-stack',
     text: '[B]: look at the top 3 cards of your Memories; put any of them on the bottom. Then draw 1.', flavor: 'The sky remembers what we forget.' },
-  { id: 'SI-C06', name: 'Twist of Fate', type: 'Chant', domain: 'Fate', chapter: 0, echo: 2, fate: 0, sure: 0, stars: 1, icon: 'spiral-bloom',
+  { id: 'SI-C06', name: 'Twist of Fate', type: 'Word', domain: 'Fate', chapter: 0, echo: 2, fate: 0, sure: 0, stars: 1, icon: 'spiral-bloom',
     text: '[B]: fate-favored → 1 your Entity. ill-fated → ~1 opponent’s Entity.', flavor: 'A thread pulled here... is a knot tied there.' },
-  { id: 'SI-C07', name: 'Starfall', type: 'Chant', domain: 'Fate', chapter: 0, echo: 3, fate: 0, sure: 0, stars: 0, icon: 'falling-star',
+  { id: 'SI-C07', name: 'Starfall', type: 'Word', domain: 'Fate', chapter: 0, echo: 3, fate: 0, sure: 0, stars: 0, icon: 'falling-star',
     text: '[B]: flip 3. Your opponent loses 1 Essence for every 2 stars you flipped.', flavor: 'Make a wish. Not every star falls kindly.' },
 
   // ---- Relic ----
@@ -134,7 +134,7 @@ const repeat = (id: string, n: number) => Array.from({ length: n }, () => id)
 
 /** Starter decks for testing, 20 cards each. */
 export const STARTER_DECKS: Record<string, { name: string; cards: string[] }> = {
-  // V2: 14 Entities + 6 Chants
+  // V2: 14 Entities + 6 Words
   music: {
     name: 'Music',
     cards: [

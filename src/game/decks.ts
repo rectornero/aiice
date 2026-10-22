@@ -23,8 +23,8 @@ export const DECK_RULES = {
   size: 20,
   /** at most this many copies of one card */
   maxCopies: 3,
-  /** only these card types can be in a deck (Relics aren't playable yet). V2: Chants are playable. */
-  playableTypes: ['Entity', 'Chant'] as readonly Card['type'][],
+  /** only these card types can be in a deck (Relics aren't playable yet). V2: Words are playable. */
+  playableTypes: ['Entity', 'Word'] as readonly Card['type'][],
   /** warn when the deck has fewer Chapter 1 Entities than this (they start Stories) */
   minChapter1: 6,
 } as const
@@ -142,7 +142,7 @@ export function validateDeck(cards: string[]): DeckCheck {
     const c = CARD_BY_ID[id]
     if (!c) { problems.push(`Unknown card ${id}.`); continue }
     if (n > maxCopies) problems.push(`${c.name}: ${n} copies (max ${maxCopies}).`)
-    if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities and Chants can be played for now.`)
+    if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities and Words can be played for now.`)
   }
 
   const curve = chapterCurve(cards)

@@ -81,7 +81,7 @@ describe('validateDeck', () => {
 
   it('allows only Entities and known cards', () => {
     const cards = [...STARTER_DECKS.music.cards.slice(2), 'SOFA-R01', 'NOPE-1']
-    expect(validateDeck(cards).problems).toEqual(['Aqualith is a Relic; only Entities and Chants can be played for now.', 'Unknown card NOPE-1.'])
+    expect(validateDeck(cards).problems).toEqual(['Aqualith is a Relic; only Entities and Words can be played for now.', 'Unknown card NOPE-1.'])
   })
 
   it('warns about few Chapter 1 Entities and Chapter gaps', () => {

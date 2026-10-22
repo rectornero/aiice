@@ -227,7 +227,7 @@ function hintFor(s: GameState, me: PlayerIdx, mode: MatchMode, botThinking: bool
     const chapters = [...new Set(pl.thoughts.filter((c) => pl.stories.some((st) => canContinue(s, me, c, st))).map((c) => card(c).chapter))].sort()
     if (chapters.length) items.push(`Continue a Story with a Chapter ${chapters.join(' or ')}`)
     if (pl.thoughts.some((c) => canStart(s, me, c))) items.push('Imagine a Chapter 1 Entity to start a Story')
-    if (pl.thoughts.some((c) => !canChant(s, me, c))) items.push('Chant a green card')
+    if (pl.thoughts.some((c) => !canChant(s, me, c))) items.push('Add a green Word to your Chant')
     const fightState = { ...s, phase: 'fight' as const }
     if (pl.stories.some((st) => !canAttack(fightState, st))) items.push('Go to Fight')
     if (!items.length) items.push('End your turn')
@@ -266,7 +266,7 @@ function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile, clickChant }:
         <CardView key={c.uid} card={card(c)} size="sm" tile selected={sel?.kind === 'chant' && sel.uid === c.uid} onClick={() => clickChant(c.uid)} />
       ))}
       {Array.from({ length: Math.max(0, RULES.maxChants - pl.chants.length) }, (_, i) => (
-        <div key={i} className="slot chant-slot">{i === 0 ? `Echo ${pl.chants.length + 1}` : 'Chant'}</div>
+        <div key={i} className="slot chant-slot">{i === 0 ? `Echo ${pl.chants.length + 1}` : 'Word'}</div>
       ))}
     </div>
   )
@@ -343,12 +343,12 @@ function HandActions({ s, me, c, canPlay, act, done }: {
 }) {
   const myTurn = canPlay && s.phase === 'main'
   const conts = s.players[me].stories.filter((st) => canContinue(s, me, c, st))
-  const noChant = card(c).type === 'Chant' ? canChant(s, me, c) : null
+  const noChant = card(c).type === 'Word' ? canChant(s, me, c) : null
   return (
     <div className="actions">
-      {myTurn && card(c).type === 'Chant' && (noChant === null ? (
+      {myTurn && card(c).type === 'Word' && (noChant === null ? (
         <button className="btn green" onClick={() => { act({ t: 'chant', uid: c.uid }); done() }}>
-          Chant it{s.players[me].chants.length + 1 >= RULES.maxChants ? ' and complete the Phrase' : ''}
+          Add to your Chant{s.players[me].chants.length + 1 >= RULES.maxChants ? ' (completes it)' : ''}
         </button>
       ) : <div className="muted">{noChant}</div>)}
       {myTurn && canStart(s, me, c) && <button className="btn primary" onClick={() => { act({ t: 'imagineNew', uid: c.uid }); done() }}>Imagine: start a new Story</button>}

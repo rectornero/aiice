@@ -39,8 +39,8 @@ export function Art({ card }: { card: Card }) {
   )
 }
 
-/** Top-right number: Chapter for Entities, Echo for Chants. */
-const cornerOf = (c: Card) => (c.type === 'Chant' ? c.echo ?? 1 : c.type === 'Entity' ? c.chapter : null)
+/** Top-right number: Chapter for Entities, Echo for Words. */
+const cornerOf = (c: Card) => (c.type === 'Word' ? c.echo ?? 1 : c.type === 'Entity' ? c.chapter : null)
 
 interface Props {
   card: Card
@@ -50,7 +50,7 @@ interface Props {
   onClick?: () => void
   badge?: ReactNode
   extra?: ReactNode
-  /** a short tile for the Chant row */
+  /** a short tile for the Chant (the row of Words) */
   tile?: boolean
 }
 
@@ -68,7 +68,7 @@ export function CardView({ card, size = 'md', selected, dim, onClick, badge, ext
           <div className="fr-top">
             <DomainGlyph domain={card.domain} />
             <span className="fr-name">{card.name}</span>
-            {corner !== null && <span className="fr-corner" title={card.type === 'Chant' ? 'Echo' : 'Chapter'}>{corner}</span>}
+            {corner !== null && <span className="fr-corner" title={card.type === 'Word' ? 'Echo' : 'Chapter'}>{corner}</span>}
           </div>
           <Art card={card} />
           {size === 'md' && !tile && <div className="fr-text"><CardText text={card.text} /></div>}
@@ -81,7 +81,7 @@ export function CardView({ card, size = 'md', selected, dim, onClick, badge, ext
               </>
             ) : (
               <>
-                {!tile && <span className="kind">{card.type === 'Chant' ? `Echo ${card.echo ?? 1}` : card.type}</span>}
+                {!tile && <span className="kind">{card.type === 'Word' ? `Echo ${card.echo ?? 1}` : card.type}</span>}
                 <Stars n={card.stars} />
               </>
             )}
@@ -115,7 +115,7 @@ export function CardDetails({ card }: { card: Card }) {
       <div className="muted">
         {card.id} · {card.domain} {card.type}
         {card.type === 'Entity' && <> · Chapter {card.chapter}</>}
-        {card.type === 'Chant' && <> · Echo {card.echo ?? 1}</>}
+        {card.type === 'Word' && <> · Echo {card.echo ?? 1}</>}
         {card.rarity && <> · {card.rarity}</>}
       </div>
       {card.type === 'Entity' && (
@@ -125,9 +125,9 @@ export function CardDetails({ card }: { card: Card }) {
           <span><b>Stars</b> <Stars n={card.stars} /></span>
         </div>
       )}
-      {card.type === 'Chant' && (
+      {card.type === 'Word' && (
         <div className="statline">
-          <span><b>Echo</b> {card.echo ?? 1}: needs {(card.echo ?? 1) - 1} Chant{card.echo === 2 ? '' : 's'} in your row</span>
+          <span><b>Echo</b> {card.echo ?? 1}: needs {(card.echo ?? 1) - 1} Word{card.echo === 2 ? '' : 's'} already in your Chant</span>
           <span><b>Stars</b> <Stars n={card.stars} /></span>
         </div>
       )}

@@ -251,7 +251,7 @@ export function computeField(s: GameState): Map<string, FieldEntity> {
 // ---------- cards ----------
 
 const isMusic = (e: { k: Card }) => e.k.domain === 'Music'
-const chantOf = (domain: string, echo?: number) => (k: Card) => k.type === 'Chant' && k.domain === domain && (echo === undefined || k.echo === echo)
+const chantOf = (domain: string, echo?: number) => (k: Card) => k.type === 'Word' && k.domain === domain && (echo === undefined || k.echo === echo)
 
 /** Layer 2 order: Aqua Serenade's fate-favored must exist before Hikari reads it. */
 const GRANT_ORDER = ['SOFA-M04', 'SOFA-096', 'SOFA-028']
@@ -274,8 +274,8 @@ export const EFFECTS: Record<string, Effect> = {
     onActivate: (s, self, owner) =>
       traitTo(s, self, owner, imagined(s).filter((e) => card(e.c).domain === 'Music').map((e) => e.c.uid), 1, false, 'resonant', {}, ['Music Entity', 'Music Entities']),
   },
-  // Dreaming Violinist — [B]: Remember 1 Chant [Domain: Music, Echo: 1]
-  'SOFA-004': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music Echo 1 Chant', chantOf('Music', 1)) },
+  // Dreaming Violinist — [B]: Remember 1 Word [Domain: Music, Echo: 1]
+  'SOFA-004': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music Echo 1 Word', chantOf('Music', 1)) },
   // Blazing Melody — [O]: {1} brave → 3 Entities [1 turn]
   'SOFA-005': {
     onActivate: (s, self, owner) => traitTo(s, self, owner, imagined(s).map((e) => e.c.uid), 3, false, 'brave', { oneTurn: true }, ['Entity', 'Entities']),
@@ -431,9 +431,9 @@ export const EFFECTS: Record<string, Effect> = {
     },
   },
   // Kazuki Amagiri — When instanced: Remember 1 Word [Domain: Fate, Echo: 2]
-  'SOFA-F04': { onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Echo 2 Chant', chantOf('Fate', 2)) },
+  'SOFA-F04': { onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Echo 2 Word', chantOf('Fate', 2)) },
 
-  // ---------- V2 Chants (green). [B] triggers when chanted. ----------
+  // ---------- V2 Words (green). [B] triggers when the Word joins your Chant. ----------
   // Tuning Hum — resonant → ~2 your Entities [Domain: Music]
   'SI-C01': {
     onEnter: (s, self, owner) =>

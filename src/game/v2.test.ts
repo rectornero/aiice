@@ -295,7 +295,7 @@ describe('V2.7: thin Memories flip from the Subconscious', () => {
 describe('V2.8: a sure hit wins ties against a flip', () => {
   it('sure vs flip tie goes to the sure hit; sure vs sure is still a tie', () => {
     // Aqua Beat sure 2 vs Sparkle Keys flipping one 2-star card = 2
-    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [[], ['SOFA-003', 'SOFA-003']] })
+    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [[], ['SOFA-017', 'SOFA-017']] })
     s = fight(s, 'SOFA-001', 'SOFA-002', ['sure', 'flip'])
     expect(s.lastFight?.attacker.total).toBe(s.lastFight?.defender.total)
     expect(s.lastFight?.outcome).toBe('attacker')

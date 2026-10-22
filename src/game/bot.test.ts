@@ -40,6 +40,20 @@ describe('bot', () => {
     expect.unreachable('no direct attack chance came up')
   })
 
+  it('sets its Values at setup and finishes a game', () => {
+    for (const level of ['easy', 'normal'] as BotLevel[]) {
+      let s = newGame({ seed: 21, decks: [music, fate], names: ['A', 'B'], chooseValues: true })
+      const bot = botPolicyFor(level)
+      for (let i = 0; i < 4000 && s.winner === null; i++) {
+        const next = reduce(s, bot(s, whoMustAct(s)!)!)
+        expect(next).not.toBe(s)
+        s = next
+      }
+      expect(s.players.every((pl) => pl.essenceStack.length > 0 || pl.essenceDraws)).toBe(true)
+      expect(s.turn).toBeGreaterThan(4)
+    }
+  })
+
   // 2 levels × 2 levels × 2 deck orders × 25 games = 200 games
   const combos: { levels: [BotLevel, BotLevel]; decks: [string[], string[]]; name: string }[] = []
   for (const a of ['easy', 'normal'] as BotLevel[])

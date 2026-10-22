@@ -8,8 +8,8 @@
 
 import { cardName, type Card } from './cards'
 import {
-  card, disperseOne, drawOne, flipCards, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, shuffle, top, UNDELETABLE,
-  type CardInst, type GameState, type PendingChoice, type PlayerIdx, type Trait, type TraitInfo,
+  card, drawOne, endFight, fighterOf, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, setValues, shuffle, top, UNDELETABLE,
+  type CardInst, type GameState, type PendingChoice, type PlayerIdx, type Story, type Trait, type TraitInfo,
 } from './engine'
 
 /** An imagined Entity while the continuous layers are computed. */
@@ -49,6 +49,28 @@ export interface Effect {
   grant?: (field: FieldEntity[], self: FieldEntity) => void
   /** layer 3: continuous bonuses, reading layer-2 traits */
   boost?: (field: FieldEntity[], self: FieldEntity) => void
+  /** Words: the "Echo:" part, when the Word lands after another Word in your Chant. Entities: "when you Echo". */
+  onEcho?: Hook
+  /** Entities: a Word just landed in their owner's Chant */
+  onChantLanded?: (s: GameState, self: CardInst, owner: PlayerIdx, word: CardInst) => void
+  /** Whisper Words: played from Thoughts during a fight (it's already in the Reverie) */
+  onWhisper?: Hook
+  /** Words in a Chant: an Entity was read */
+  onEntityRead?: Hook
+  /** Relics: played onto a Story */
+  onEquip?: (s: GameState, self: CardInst, owner: PlayerIdx, story: Story) => void
+  /** Relics: layer 2 grant to the Entity on top of their Story (before GRANT_ORDER) */
+  relicGrant?: (holder: FieldEntity) => void
+  /** Relics: at the end of their owner's turn */
+  relicEndOfTurn?: (s: GameState, self: CardInst, owner: PlayerIdx, story: Story) => void
+  /** activated ability used in the fight window ("Before a fight"), not in the Main step */
+  fightTiming?: boolean
+  /** why the activated ability can't be used now (beyond uses and timing), or null */
+  blocked?: (s: GameState, self: CardInst, owner: PlayerIdx) => string | null
+  /** may start a new Story although it isn't a Chapter 1 */
+  startAnyway?: (s: GameState, owner: PlayerIdx) => boolean
+  /** why it can't continue this Story, or null */
+  continueBlocked?: (s: GameState, owner: PlayerIdx, story: Story) => string | null
 }
 
 type Dur = Pick<Trait, 'oneTurn' | 'untilTurn'>
@@ -130,7 +152,7 @@ function traitTo(s: GameState, self: CardInst, owner: PlayerIdx, options: string
 }
 
 /** "Remember 1 <what>": search Memories, put it in Thoughts, then shuffle Memories. */
-function remember(s: GameState, self: CardInst, owner: PlayerIdx, what: string, match: (k: Card) => boolean) {
+function remember(s: GameState, self: CardInst, owner: PlayerIdx, what: string, match: (k: Card) => boolean, place?: 'any' | 'familiar') {
   const pl = s.players[owner]
   log(s, `${nm(self)}: remember a ${what}.`)
   const options = pl.memories.filter((c) => match(card(c))).map((c) => c.uid)
@@ -138,7 +160,7 @@ function remember(s: GameState, self: CardInst, owner: PlayerIdx, what: string, 
     shuffle(s, pl.memories)
     return log(s, `${pl.name} finds no ${what} in their Memories.`)
   }
-  ask(s, { player: owner, sourceUid: self.uid, zone: 'memories', options, min: 1, max: 1, effect: 'remember', data: { src: nm(self) },
+  ask(s, { player: owner, sourceUid: self.uid, zone: 'memories', options, min: 1, max: 1, effect: 'remember', data: place ? { src: nm(self), place } : { src: nm(self) },
     prompt: `${nm(self)}: remember a ${what} from your Memories.` }, '')
 }
 
@@ -169,14 +191,45 @@ export function destroy(s: GameState, uid: string, byFoe = true): boolean {
   if (EFFECTS[c.cardId]?.insteadOfDeletion?.(s, c, p)) return false
   // HOUSE RULE (RULES.timeless): timeless = "when it would be deleted, its owner loses 1 Essence instead".
   if (RULES.timeless && hasTrait(s, uid, 'timeless')) {
-    log(s, `${nm(c)} is timeless: ${pl.name} loses 1 Value instead.`)
-    loseEssence(s, p, 1, nm(c))
+    log(s, `${nm(c)} is timeless: ${pl.name} reveals 1 Value instead.`)
+    loseEssence(s, p, 1, nm(c), undefined, true)
     return false
   }
   removeTop(s, p, story.id, byFoe)
   EFFECTS[c.cardId]?.onDeleted?.(s, c, p)
   forgotten(s, c)
+  for (const q of [0, 1] as PlayerIdx[]) for (const w of s.players[q].chants) if (s.winner === null) EFFECTS[w.cardId]?.onEntityRead?.(s, w, q)
   return true
+}
+
+export const isFightAbility = (cardId: string) => !!EFFECTS[cardId]?.fightTiming
+export const activationBlocked = (s: GameState, c: CardInst, owner: PlayerIdx) => EFFECTS[c.cardId]?.blocked?.(s, c, owner) ?? null
+export const specialStart = (s: GameState, p: PlayerIdx, c: CardInst) => !!EFFECTS[c.cardId]?.startAnyway?.(s, p)
+export const continueBlocked = (s: GameState, p: PlayerIdx, c: CardInst, story: Story) => EFFECTS[c.cardId]?.continueBlocked?.(s, p, story) ?? null
+
+/** A Word landed in p's Chant: its Echo part if it echoed, then "when you Echo" and "when a Word lands" on p's Entities. */
+export function echo(s: GameState, word: CardInst, p: PlayerIdx, echoed: boolean) {
+  if (echoed && EFFECTS[word.cardId]?.onEcho) {
+    log(s, `${nm(word)} echoes.`)
+    EFFECTS[word.cardId].onEcho!(s, word, p)
+  }
+  for (const e of imagined(s, p)) {
+    if (echoed) EFFECTS[e.c.cardId]?.onEcho?.(s, e.c, p)
+    EFFECTS[e.c.cardId]?.onChantLanded?.(s, e.c, p, word)
+  }
+}
+
+export function whisper(s: GameState, word: CardInst, p: PlayerIdx) {
+  EFFECTS[word.cardId]?.onWhisper?.(s, word, p)
+}
+
+export function equipped(s: GameState, relic: CardInst, p: PlayerIdx, story: Story) {
+  EFFECTS[relic.cardId]?.onEquip?.(s, relic, p, story)
+}
+
+/** End of p's turn, before temporary effects expire. */
+export function endOfTurn(s: GameState, p: PlayerIdx) {
+  for (const st of [...s.players[p].stories]) if (st.relic && s.winner === null) EFFECTS[st.relic.cardId]?.relicEndOfTurn?.(s, st.relic, p, st)
 }
 
 /** A card just went to a discard pile. */
@@ -209,6 +262,14 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     pl.thoughts.push(c)
     shuffle(s, pl.memories)
     log(s, `${ch.data?.src}: ${pl.name} remembers ${cardName(card(c))}.`)
+    // Aria / Sakura Blossom Call: then it may continue one of your Stories
+    if (ch.data?.place) {
+      const familiar = ch.data.place === 'familiar'
+      const options = pl.stories.filter((st) => !familiar || st.cards.some((x) => card(x).name.startsWith('Familiar'))).map((st) => top(st).uid)
+      ask(s, { player: ch.player, sourceUid: ch.sourceUid, zone: 'field', options, min: 0, max: 1, effect: 'placeOn', data: { src: String(ch.data.src), card: c.uid },
+        prompt: `${ch.data.src}: choose ${familiar ? 'a Story with a Familiar' : 'one of your Stories'} to continue with ${card(c).name} (or none to keep it).` },
+      `${ch.data.src}: no Story to continue, ${card(c).name} stays in ${pl.name}'s Thoughts.`)
+    }
   },
   bottom: (s, ch, picks) => {
     const pl = s.players[ch.player]
@@ -257,19 +318,87 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
       pl.lost--
     })
   },
-  hiroshi: (s, ch, picks) => {
+  /** forget picked cards from Thoughts (data.draw: then draw that many) */
+  forget: (s, ch, picks) => {
     const pl = s.players[ch.player]
-    const c = pl.thoughts.find((x) => x.uid === picks[0])
-    const story = pl.stories.find((st) => top(st).uid === ch.sourceUid)
-    if (!c) return log(s, 'Familiar Hiroshi: no Entity chosen.')
-    if (!story) return log(s, 'Familiar Hiroshi is no longer imagined: nothing happens.')
+    for (const uid of picks) {
+      const c = pl.thoughts.find((x) => x.uid === uid)
+      if (!c) continue
+      pl.thoughts = pl.thoughts.filter((x) => x !== c)
+      pl.discard.push(c)
+      log(s, `${ch.data?.src}: ${pl.name} forgets ${cardName(card(c))}.`)
+      forgotten(s, c)
+    }
+    const n = Number(ch.data?.draw ?? 0)
+    if (n) log(s, `${ch.data?.src}: ${pl.name} draws ${n}.`)
+    for (let i = 0; i < n && s.winner === null; i++) drawOne(s, ch.player)
+  },
+  /** +N to the picked Entities (data.n, data.oneTurn) */
+  bonus: (s, ch, picks) => {
+    const n = Number(ch.data?.n ?? 0)
+    for (const uid of picks) {
+      if (ownerOf(s, uid) === null) continue
+      addBonus(s, uid, n, ch.data?.oneTurn === true)
+      log(s, `${ch.data?.src}: ${nameOf(s, uid)} gets +${n}${ch.data?.oneTurn ? ' this turn' : ''}.`)
+    }
+  },
+  /** put a card from the Reverie back into Thoughts */
+  recall: (s, ch, picks) => {
+    const pl = s.players[ch.player]
+    const c = pl.discard.find((x) => x.uid === picks[0])
+    if (!c) return log(s, `${ch.data?.src}: no Word taken back.`)
+    pl.discard = pl.discard.filter((x) => x !== c)
+    pl.thoughts.push(c)
+    log(s, `${ch.data?.src}: ${pl.name} remembers ${card(c).name} from their Chant.`)
+  },
+  /** Dante Shadowstrike: forget 2 of your Stories (every card in them goes to the Reverie) */
+  forgetStories: (s, ch, picks) => {
+    const pl = s.players[ch.player]
+    for (const uid of picks) {
+      const st = pl.stories.find((x) => top(x).uid === uid)
+      if (!st) continue
+      pl.stories = pl.stories.filter((x) => x !== st)
+      pl.discard.push(...st.cards, ...(st.lost ?? []), ...(st.relic ? [st.relic] : []))
+      log(s, `${ch.data?.src}: ${pl.name} forgets ${card(top(st)).name}'s Story.`)
+      for (const c of st.cards) forgotten(s, c)
+    }
+  },
+  /** put a card from Thoughts on top of a picked Story (data.card), ignoring the Chapter order (Aria, Sakura Blossom Call, Ryuji) */
+  placeOn: (s, ch, picks) => {
+    const pl = s.players[ch.player]
+    const c = pl.thoughts.find((x) => x.uid === ch.data?.card)
+    const story = pl.stories.find((st) => top(st).uid === picks[0])
+    if (!c || !story) return log(s, `${ch.data?.src}: the card stays in ${pl.name}'s Thoughts.`)
     pl.thoughts = pl.thoughts.filter((x) => x !== c)
     story.cards.push(c)
     story.movedTurn = s.turn
-    log(s, `Familiar Hiroshi: ${pl.name} continues the Story with ${cardName(card(c))}.`)
-    traitOrBonus(s, c, 'fated', 1)
+    if (card(c).chapter >= 2) pl.bigTurn = s.turn
+    log(s, `${ch.data?.src}: ${pl.name} continues the Story with ${cardName(card(c))}.`)
+    if (ch.data?.ryuji) {
+      traitOrBonus(s, c, 'fated', 1)
+      giveTrait(s, c.uid, 'inoffensive', { oneTurn: true })
+      log(s, `${nm(c)} gets inoffensive this turn.`)
+    }
     enter(s, c, ch.player)
   },
+  /** Ryuji: pick the Fate Chapter 2 Entity from Thoughts, then it continues his Story */
+  ryuji: (s, ch, picks) => {
+    if (!picks.length) return log(s, 'Familiar Ryuji: no Entity chosen.')
+    if (ownerOf(s, ch.sourceUid) === null) return log(s, 'Familiar Ryuji is no longer imagined: nothing happens.')
+    CONTINUATIONS.placeOn(s, { ...ch, data: { src: 'Familiar Ryuji', card: picks[0], ryuji: true } }, [ch.sourceUid])
+  },
+  /** Storm Dragon Roar: end the fight, or +3 and draw 1 if it wins */
+  storm: (s, ch, picks) => {
+    if (!s.pendingFight) return
+    if (picks[0] === 'end') return fightEnds(s, 'Storm Dragon Roar')
+    const uid = fighterOf(s, ch.player)
+    if (!uid) return
+    const m = (s.mods[uid] = modsOf(s, uid))
+    m.fightBonus = (m.fightBonus ?? 0) + 3
+    m.fightDraw = true
+    log(s, `Storm Dragon Roar: ${nameOf(s, uid)} gets +3 for this fight (draw 1 if it wins).`)
+  },
+  values: (s, ch, picks) => setValues(s, ch.player, picks),
 }
 
 /** V2.4 Change of Values: pick a revealed Value to take back (or none), then the Thoughts card that replaces it face down. */
@@ -293,6 +422,10 @@ export function resolveChoice(s: GameState, ch: PendingChoice, picks: string[]) 
 /** Layered view of every imagined Entity: traits (stored + continuous) and continuous bonus. */
 export function computeField(s: GameState): Map<string, FieldEntity> {
   const field: FieldEntity[] = imagined(s).map(({ c, owner }) => ({ c, k: card(c), owner, traits: storedTraits(s, c.uid), bonus: 0 }))
+  for (const e of field) {
+    const relic = s.players[e.owner].stories.find((st) => top(st).uid === e.c.uid)?.relic
+    if (relic) EFFECTS[relic.cardId]?.relicGrant?.(e)
+  }
   for (const id of GRANT_ORDER) for (const e of field) if (e.k.id === id) EFFECTS[id].grant!(field, e)
   for (const e of field) EFFECTS[e.k.id]?.boost?.(field, e)
   return new Map(field.map((e) => [e.c.uid, e]))
@@ -300,172 +433,292 @@ export function computeField(s: GameState): Map<string, FieldEntity> {
 
 // ---------- cards ----------
 
-const isMusic = (e: { k: Card }) => e.k.domain === 'Music'
-const chantOf = (domain: string, echo?: number) => (k: Card) => k.type === 'Word' && k.domain === domain && (echo === undefined || k.echo === echo)
+function nameOf(s: GameState, uid: string) {
+  const e = imagined(s).find((x) => x.c.uid === uid)
+  return e ? card(e.c).name : 'It'
+}
+/** Music Entity in the field layers: its Domain, or "counts as Music" (Earthy Strums) */
+const isMusic = (e: FieldEntity) => e.k.domain === 'Music' || has(e, 'music')
+const isMusicNow = (s: GameState, c: CardInst) => card(c).domain === 'Music' || hasTrait(s, c.uid, 'music')
+const mine = (self: FieldEntity) => (e: FieldEntity) => e.owner === self.owner
+const wordOf = (domains: string[], echo?: number) => (k: Card) => k.type === 'Word' && domains.includes(k.domain) && (echo === undefined || k.echo === echo)
+const entityOf = (domains: string[], chapter?: number) => (k: Card) => k.type === 'Entity' && domains.includes(k.domain) && (chapter === undefined || k.chapter === chapter)
+const relicOf = (domains: string[]) => (k: Card) => k.type === 'Relic' && domains.includes(k.domain)
+const yours = (s: GameState, p: PlayerIdx) => imagined(s, p).map((e) => e.c.uid)
 
-/** Layer 2 order: Aqua Serenade's fated must exist before Hikari reads it. */
-const GRANT_ORDER = ['SOFA-M04', 'SOFA-096', 'SOFA-028']
+/** "Forget 1 card" (from Thoughts), optionally then draw. */
+function forgetCards(s: GameState, self: CardInst, owner: PlayerIdx, n: number, draw = 0) {
+  const pl = s.players[owner]
+  if (!pl.thoughts.length) {
+    log(s, `${nm(self)}: ${pl.name} has no card to forget.`)
+    for (let i = 0; i < draw && s.winner === null; i++) drawOne(s, owner)
+    return
+  }
+  ask(s, { player: owner, sourceUid: self.uid, zone: 'thoughts', options: pl.thoughts.map((c) => c.uid), min: n, max: n, effect: 'forget', data: { src: nm(self), draw },
+    prompt: `${nm(self)}: forget ${n} card${n === 1 ? '' : 's'} from your Thoughts${draw ? `, then draw ${draw}` : ''}.` }, '')
+}
+
+/** A Whisper ends the pending fight: no result, the attack is spent. */
+function fightEnds(s: GameState, src: string) {
+  endFight(s)
+  s.lastFight = null
+  log(s, `${src}: the fight ends.`)
+}
+
+/** Whisper on your own fighting Entity: +N for this fight, or N more flips. */
+function onFighter(s: GameState, self: CardInst, owner: PlayerIdx, f: (uid: string) => void) {
+  const uid = fighterOf(s, owner)
+  if (!uid) return log(s, `${nm(self)}: no fighting Entity.`)
+  f(uid)
+}
+
+/** Layer 2 order: Aqua Serenade and Camelia grant brave before Pyroblast reads it; fated (Aqua Serenade) before Hikari reads it. */
+const GRANT_ORDER = ['SOFA-008', 'SOFA-096', 'SOFA-019', 'SOFA-028']
 
 export const EFFECTS: Record<string, Effect> = {
-  // Aqua Beat — [B]: brave [3 turns]
+  // ---------- Music Entities ----------
+  // Aqua Beat — Gains brave until the end of your next turn.
   'SOFA-001': {
     onEnter: (s, self) => {
-      // HOUSE RULE: "[3 turns]" = this turn and the next two global turns.
-      log(s, 'Aqua Beat: brave [3 turns].')
+      log(s, 'Aqua Beat: brave until the end of your next turn.')
       giveTrait(s, self.uid, 'brave', { untilTurn: s.turn + 2 })
     },
   },
-  // Sparkle Keys — [B]: Remember 1 Entity [Domain: Music, Chapter: 2]
-  'SOFA-002': {
-    onEnter: (s, self, owner) => remember(s, self, owner, 'Music Chapter 2 Entity', (k) => k.type === 'Entity' && k.domain === 'Music' && k.chapter === 2),
-  },
-  // Earthy Strums — [O]: {1} resonant → 1 Entity [Domain: Music]
+  // Sparkle Keys — Remember 1 Music Entity of Chapter 2.
+  'SOFA-002': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music Chapter 2 Entity', entityOf(['Music'], 2)) },
+  // Earthy Strums — [O] {1}: 1 Entity counts as Music this turn.
   'SOFA-003': {
-    onActivate: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s).filter((e) => card(e.c).domain === 'Music').map((e) => e.c.uid), 1, false, 'resonant', {}, ['Music Entity', 'Music Entities']),
+    onActivate: (s, self, owner) => traitTo(s, self, owner, imagined(s).map((e) => e.c.uid), 1, false, 'music', { oneTurn: true }, ['Entity', 'Entities']),
   },
-  // Dreaming Violinist — [B]: Remember 1 Word [Domain: Music, Echo: 1]
-  'SOFA-004': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music Echo 1 Word', chantOf('Music', 1)) },
-  // Blazing Melody — [O]: {1} brave → 3 Entities [1 turn]
+  // Breezy Strings — Remember 1 Music Word with Echo 1.
+  'SOFA-004': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music Echo 1 Word', wordOf(['Music'], 1)) },
+  // Blazing Melody — [O] {1}: up to 3 Entities gain brave this turn.
   'SOFA-005': {
-    onActivate: (s, self, owner) => traitTo(s, self, owner, imagined(s).map((e) => e.c.uid), 3, false, 'brave', { oneTurn: true }, ['Entity', 'Entities']),
+    onActivate: (s, self, owner) => traitTo(s, self, owner, imagined(s).map((e) => e.c.uid), 3, true, 'brave', { oneTurn: true }, ['Entity', 'Entities']),
   },
-  // Volt Strummer — +1 for each resonant Entity you are imagining
-  'SOFA-M01': {
-    boost: (field, self) => { self.bonus += field.filter((e) => e.owner === self.owner && has(e, 'resonant')).length },
+  // Terra Harmonia — [O] {3}: Before a fight: 1 defending Music Entity gets +2.
+  'SOFA-006': {
+    // HOUSE RULE: used in the fight window when your Music Entity defends; the +2 lasts for that fight.
+    fightTiming: true,
+    blocked: (s, _self, owner) => {
+      const f = s.pendingFight
+      const uid = fighterOf(s, owner)
+      if (!f || f.defender.player !== owner || !uid) return 'Only when one of your Music Entities defends.'
+      const c = imagined(s, owner).find((e) => e.c.uid === uid)!.c
+      return isMusicNow(s, c) ? null : 'Only when one of your Music Entities defends.'
+    },
+    onActivate: (s, self, owner) => onFighter(s, self, owner, (uid) => {
+      const m = (s.mods[uid] = modsOf(s, uid))
+      m.fightBonus = (m.fightBonus ?? 0) + 2
+      log(s, `Terra Harmonia: ${nameOf(s, uid)} gets +2 for this fight.`)
+    }),
   },
-  // Rhythmic Inferno — +1 to all other Music Entities that are resonant and brave
-  'SOFA-M02': {
-    boost: (field, self) => {
-      for (const e of field) if (e !== self && isMusic(e) && has(e, 'resonant') && has(e, 'brave')) e.bonus += 1
+  // Luminelle — All your Music Entities gain inspiring.
+  'SOFA-007': {
+    onEnter: (s, _self, owner) => {
+      log(s, 'Luminelle: your Music Entities gain inspiring.')
+      for (const e of imagined(s, owner)) if (isMusicNow(s, e.c)) giveTrait(s, e.c.uid, 'inspiring')
     },
   },
-  // Aqua Serenade — any Music "Pianist" gets brave and fated. When deleted: all your resonant Entities get +1.
-  'SOFA-M04': {
-    grant: (field) => {
-      for (const e of field) if (isMusic(e) && e.k.title?.includes('Pianist')) grantTo(e, 'brave', 'fated')
+  // Aqua Serenade — Your Music Pianists gain brave and fated, and ignore inoffensive (not inoffensive: +1 instead).
+  // When read: your Music Entities get +1.
+  'SOFA-008': {
+    grant: (field, self) => {
+      for (const e of field.filter(mine(self))) {
+        if (!isMusic(e) || !e.k.title?.includes('Pianist')) continue
+        grantTo(e, 'brave', 'fated')
+        const i = e.traits.findIndex((t) => t.name === 'inoffensive')
+        if (i >= 0) e.traits.splice(i, 1)
+        else e.bonus += 1
+      }
     },
     onDeleted: (s, _self, owner) => {
-      log(s, 'Aqua Serenade: all your resonant Entities get +1.')
-      for (const e of imagined(s, owner)) if (hasTrait(s, e.c.uid, 'resonant')) addBonus(s, e.c.uid, 1)
+      log(s, 'Aqua Serenade: your Music Entities get +1.')
+      for (const e of imagined(s, owner)) if (isMusicNow(s, e.c)) addBonus(s, e.c.uid, 1)
     },
   },
-  // Camelia Nightshade — When instanced: your resonant Music Entities get +3 [1 turn].
-  // While imagined: your resonant Music Entities get brave, charming and defender.
-  'SOFA-096': {
-    onEnter: (s, _self, owner) => {
-      log(s, 'Camelia Nightshade: your resonant Music Entities get +3 until the end of the turn.')
-      for (const e of imagined(s, owner)) if (card(e.c).domain === 'Music' && hasTrait(s, e.c.uid, 'resonant')) addBonus(s, e.c.uid, 3, true)
+  // Zephyr Melody — Forget 1 card. Remember 1 Music Word with Echo 1 and 1 with Echo 2.
+  'SOFA-009': {
+    onEnter: (s, self, owner) => {
+      forgetCards(s, self, owner, 1)
+      remember(s, self, owner, 'Music Echo 1 Word', wordOf(['Music'], 1))
+      remember(s, self, owner, 'Music Echo 2 Word', wordOf(['Music'], 2))
     },
+  },
+  // Pyrothump — no text (the vanilla bonus pays for its stats)
+  // Rhythmic Inferno — Your other brave Music Entities get +1.
+  'SOFA-011': {
+    boost: (field, self) => {
+      for (const e of field.filter(mine(self))) if (e !== self && isMusic(e) && has(e, 'brave')) e.bonus += 1
+    },
+  },
+  // Volt Strummer — Gets +1 for each Music Entity you imagine (itself included).
+  'SOFA-012': {
+    boost: (field, self) => { self.bonus += field.filter((e) => e.owner === self.owner && isMusic(e)).length },
+  },
+  // Dante Shadowstrike — [O] {3} Once per turn: remember any Word. To imagine him, forget 2 of your Stories.
+  'SOFA-013': {
+    continueBlocked: (s, owner, story) => (s.players[owner].stories.filter((st) => st !== story).length >= 2 ? null : 'Needs 2 other Stories to forget.'),
+    onEnter: (s, self, owner) => {
+      const options = s.players[owner].stories.filter((st) => top(st).uid !== self.uid).map((st) => top(st).uid)
+      ask(s, { player: owner, sourceUid: self.uid, zone: 'field', options, min: 2, max: 2, effect: 'forgetStories', data: { src: 'Dante Shadowstrike' },
+        prompt: 'Dante Shadowstrike: forget 2 of your other Stories (all their cards go to your Reverie).' }, 'Dante Shadowstrike: no Story to forget.')
+    },
+    onActivate: (s, self, owner) => remember(s, self, owner, 'Word', (k) => k.type === 'Word'),
+  },
+  // Frost Melodist — When an Echo 3 Word lands in your Chant: remember 1 Word from that Chant.
+  'SOFA-014': {
+    onChantLanded: (s, self, owner, word) => {
+      if (card(word).echo !== 3) return
+      const options = s.players[owner].chants.map((c) => c.uid)
+      ask(s, { player: owner, sourceUid: self.uid, zone: 'discard', options, min: 0, max: 1, effect: 'recall', data: { src: 'Frost Melodist' },
+        prompt: 'Frost Melodist: take 1 Word of the completed Chant back into your Thoughts.' }, '')
+    },
+  },
+  // Axel Ironheart — Forget 1 card. Find Metal Saxophone, Mjölnir's Roar in your Memories and play it.
+  'SOFA-015': {
+    // HOUSE RULE: the forget is the price of the search, and Metal Saxophone isn't in set 1, so nothing happens yet.
+    onEnter: (s) => log(s, 'Axel Ironheart: Metal Saxophone, Mjölnir’s Roar isn’t in this set yet, so nothing happens.'),
+  },
+  // Melodic Sage — Remember 1 Music or Nature Relic.
+  'SOFA-016': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music or Nature Relic', relicOf(['Music', 'Nature'])) },
+  // Enchanting Druid — Remember 1 Music or Nature Word.
+  'SOFA-017': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music or Nature Word', wordOf(['Music', 'Nature'])) },
+  // Letitia — Remember 1 Music or Nature Entity.
+  'SOFA-018': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music or Nature Entity', entityOf(['Music', 'Nature'])) },
+  // Pyroblast — With Pyrothump imagined: your Music Entities gain brave (already brave: +2 instead).
+  'SOFA-019': {
     grant: (field, self) => {
-      for (const e of field) if (e.owner === self.owner && isMusic(e) && has(e, 'resonant')) grantTo(e, 'brave', 'charming', 'defender')
+      if (!field.some((e) => e.owner === self.owner && e.k.id === 'SOFA-010')) return
+      for (const e of field.filter(mine(self))) {
+        if (!isMusic(e)) continue
+        if (has(e, 'brave')) e.bonus += 2
+        else grantTo(e, 'brave')
+      }
     },
   },
-  // Luna Harmonia — forgotten when any other Entity is forgotten. Each resonant Entity gets +2.
-  'SOFA-M05': {
-    // HOUSE RULE: "forgotten" = any Entity card going to a discard pile (deleted, or forgotten from Thoughts);
-    // Luna goes through the normal deletion path, so protection and timeless can save her.
+  // Luna Harmonia — Imagine her only in a new Story, when you imagine a Chapter 2+ Entity. Forgotten when any other
+  // Entity is forgotten. Your Music Entities get +2.
+  'SOFA-020': {
+    // HOUSE RULE: she can start a new Story on a turn you've imagined a Chapter 2+ Entity (before or after her).
+    startAnyway: (s, owner) => s.players[owner].bigTurn === s.turn,
+    continueBlocked: () => 'Only in a new Story.',
+    // HOUSE RULE: "forgotten" = any Entity card going to the Reverie or turning face down (read); she goes through the
+    // normal reading path, so protection and timeless can save her.
     onOtherForgotten: (s, self) => {
       if (ownerOf(s, self.uid) === null) return
       log(s, 'Luna Harmonia: another Entity was forgotten, so she goes too.')
       destroy(s, self.uid, false)
     },
-    boost: (field) => {
-      for (const e of field) if (has(e, 'resonant')) e.bonus += 2
+    boost: (field, self) => {
+      for (const e of field.filter(mine(self))) if (isMusic(e)) e.bonus += 2
     },
   },
-  // Familiar Raiden — [B]: starless → ~2 opponent's Entities
-  'SOFA-024': {
-    onEnter: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 2, true, 'starless', {}, ["opponent's Entity", "opponent's Entities"]),
+  // Camelia Nightshade — Your Music Entities get +3 this turn. While imagined, they gain brave, charming and defender.
+  'SOFA-096': {
+    onEnter: (s, _self, owner) => {
+      log(s, 'Camelia Nightshade: your Music Entities get +3 this turn.')
+      for (const e of imagined(s, owner)) if (isMusicNow(s, e.c)) addBonus(s, e.c.uid, 3, true)
+    },
+    grant: (field, self) => {
+      for (const e of field.filter(mine(self))) if (isMusic(e)) grantTo(e, 'brave', 'charming', 'defender')
+    },
   },
-  // Familiar Takeshi — [B]: fated → 1 other Entity
+
+  // ---------- Fate Entities ----------
+  // Familiar Hiroshi — Remember 1 Fate Relic.
+  'SOFA-021': { onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Relic', relicOf(['Fate'])) },
+  // Familiar Kuro — After a fight: the Entity it attacked gains starless. If it wins, it gets +1.
+  'SOFA-022': {
+    afterFight: (s, self, _owner, f) => {
+      if (f.role === 'attacker' && ownerOf(s, f.foe.uid) !== null) {
+        giveTrait(s, f.foe.uid, 'starless')
+        log(s, `Familiar Kuro: ${nm(f.foe)} gains starless.`)
+      }
+      if (f.won && ownerOf(s, self.uid) !== null) {
+        addBonus(s, self.uid, 1)
+        log(s, 'Familiar Kuro wins: it gets +1.')
+      }
+    },
+  },
+  // Familiar Ryuji — [O]: Continue this Story with 1 Fate Entity of Chapter 2 from your Thoughts.
+  // It gains fated (already fated: +1) and inoffensive this turn.
+  'SOFA-023': {
+    // HOUSE RULE: ignores the once-per-turn Story move; usable once (he is covered afterwards).
+    blocked: (s, _self, owner) => (s.players[owner].thoughts.some((c) => entityOf(['Fate'], 2)(card(c))) ? null : 'No Fate Chapter 2 Entity in your Thoughts.'),
+    onActivate: (s, self, owner) => {
+      const options = s.players[owner].thoughts.filter((c) => entityOf(['Fate'], 2)(card(c))).map((c) => c.uid)
+      ask(s, { player: owner, sourceUid: self.uid, zone: 'thoughts', options, min: 1, max: 1, effect: 'ryuji',
+        prompt: 'Familiar Ryuji: choose a Fate Chapter 2 Entity to continue his Story. It gains fated (+1 if it has it) and inoffensive this turn.' },
+      'Familiar Ryuji: no Fate Chapter 2 Entity in Thoughts.')
+    },
+  },
+  // Familiar Raiden — Up to 2 enemy Entities gain starless.
+  'SOFA-024': {
+    onEnter: (s, self, owner) => traitTo(s, self, owner, yours(s, other(owner)), 2, true, 'starless', {}, ["opponent's Entity", "opponent's Entities"]),
+  },
+  // Familiar Takeshi — 1 other Entity gains fated.
   'SOFA-025': {
     onEnter: (s, self, owner) =>
       traitTo(s, self, owner, imagined(s).filter((e) => e.c.uid !== self.uid).map((e) => e.c.uid), 1, false, 'fated', {}, ['other Entity', 'other Entities']),
   },
-  // Familiar Kuro — After a fight: the Entity it attacked gets starless. If it defeats an Entity, it gets +1.
-  'SOFA-F01': {
-    // HOUSE RULE: only when Kuro attacked; the starless lands even if Kuro lost; "defeats" = wins the fight.
-    afterFight: (s, self, _owner, f) => {
-      if (f.role !== 'attacker') return
-      if (ownerOf(s, f.foe.uid) !== null) {
-        giveTrait(s, f.foe.uid, 'starless')
-        log(s, `Familiar Kuro: ${nm(f.foe)} gets starless.`)
-      }
-      if (f.won && ownerOf(s, self.uid) !== null) {
-        addBonus(s, self.uid, 1)
-        log(s, 'Familiar Kuro defeated an Entity: it gets +1.')
-      }
+  // Kazuki Amagiri — Remember 1 Fate Word with Echo 2. Once per turn, when you Echo: remember 1 Fate Word with Echo 1, then forget 1 card.
+  'SOFA-026': {
+    onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Echo 2 Word', wordOf(['Fate'], 2)),
+    // once per turn by itself: one Word lands per turn
+    onEcho: (s, self, owner) => {
+      remember(s, self, owner, 'Fate Echo 1 Word', wordOf(['Fate'], 1))
+      forgetCards(s, self, owner, 1)
     },
   },
-  // Familiar Hiroshi — choose a Fate Chapter 2 Entity you remember; continue this Story with it, it gets fated (or +1).
-  'SOFA-F02': {
-    onEnter: (s, self, owner) => {
-      // HOUSE RULE: triggers once on entrance, is optional, and ignores the once-per-turn Story limit.
-      const pl = s.players[owner]
-      log(s, 'Familiar Hiroshi: may continue this Story with a Fate Chapter 2 Entity from Thoughts.')
-      const options = pl.thoughts.filter((c) => card(c).type === 'Entity' && card(c).domain === 'Fate' && card(c).chapter === 2).map((c) => c.uid)
-      ask(s, { player: owner, sourceUid: self.uid, zone: 'thoughts', options, min: 0, max: 1, effect: 'hiroshi',
-        prompt: 'Familiar Hiroshi: you may continue this Story with a Fate Chapter 2 Entity. It gets fated (+1 if it has it).' },
-      'Familiar Hiroshi: no Fate Chapter 2 Entity in Thoughts.')
-    },
-  },
-  // Kurogane Ikazuchi — if about to be deleted, you lose 1 Essence instead.
-  // During a fight: if it deletes an Entity, disperse 1 lost Essence: it gets +1.
+  // Kurogane Ikazuchi — When it would be read, reveal 1 of your Values instead. When it reads an Entity in a fight: it gets +1.
   'SOFA-027': {
     insteadOfDeletion: (s, _self, owner) => {
-      log(s, `Kurogane Ikazuchi isn't deleted: ${s.players[owner].name} loses 1 Value instead.`)
-      loseEssence(s, owner, 1, 'Kurogane Ikazuchi')
+      log(s, `Kurogane Ikazuchi isn't read: ${s.players[owner].name} reveals 1 Value instead.`)
+      loseEssence(s, owner, 1, 'Kurogane Ikazuchi', undefined, true)
       return true
     },
-    afterFight: (s, self, owner, f) => {
-      const pl = s.players[owner]
-      // HOUSE RULE: the disperse is automatic whenever its owner has lost Essence.
-      if (!f.deletedFoe || ownerOf(s, self.uid) === null || !disperseOne(s, owner)) return
+    afterFight: (s, self, _owner, f) => {
+      if (!f.deletedFoe || ownerOf(s, self.uid) === null) return
       addBonus(s, self.uid, 1)
-      log(s, `Kurogane Ikazuchi deleted an Entity: ${pl.name} disperses 1 revealed Value, it gets +1.`)
+      log(s, 'Kurogane Ikazuchi read an Entity: it gets +1.')
     },
   },
-  // Hikari Mizuki — When instanced: your Entities can't be deleted until the end of your next turn.
-  // While imagined: your Entities get fated (if they have it, +2 instead).
+  // Hikari Mizuki — Your Entities can't be read until the end of your next turn. While imagined: your Entities gain fated (already fated: +2).
   'SOFA-028': {
     onEnter: (s, _self, owner) => {
       // HOUSE RULE: protects the Entities imagined now (UNDELETABLE trait), through global turn s.turn + 2.
-      log(s, 'Hikari Mizuki: your Entities can’t be deleted until the end of your next turn.')
+      log(s, 'Hikari Mizuki: your Entities can’t be read until the end of your next turn.')
       for (const e of imagined(s, owner)) giveTrait(s, e.c.uid, UNDELETABLE, { untilTurn: s.turn + 2 })
     },
     grant: (field, self) => {
-      for (const e of field) {
-        if (e.owner !== self.owner) continue
+      for (const e of field.filter(mine(self))) {
         if (has(e, 'fated')) e.bonus += 2
         else grantTo(e, 'fated')
       }
     },
   },
-  // Noboru Amano — When instanced: opponent's Entities get starless; those that have it are deleted instead.
-  // When deleted: one of your Entities gets fated.
+  // Noboru Amano — All enemy Entities gain starless; those already starless are read. When read: 1 of your Entities gains fated.
   'SOFA-029': {
     onEnter: (s, _self, owner) => {
-      log(s, 'Noboru Amano: all opponent’s Entities get starless; those that already have it are deleted.')
+      log(s, 'Noboru Amano: all enemy Entities gain starless; those already starless are read.')
       const foes = imagined(s, other(owner)).map((e) => ({ c: e.c, had: hasTrait(s, e.c.uid, 'starless') }))
       for (const { c, had } of foes) {
         if (ownerOf(s, c.uid) === null) continue
         if (had) destroy(s, c.uid)
         else {
           giveTrait(s, c.uid, 'starless')
-          log(s, `${nm(c)} gets starless.`)
+          log(s, `${nm(c)} gains starless.`)
         }
       }
     },
-    onDeleted: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fated', {}, ['of your Entities', 'of your Entities']),
+    onDeleted: (s, self, owner) => traitTo(s, self, owner, yours(s, owner), 1, false, 'fated', {}, ['of your Entities', 'of your Entities']),
   },
-  // Prima — When instanced: your Entities get timeless and fated; for each they already have, +2 instead.
-  // When deleted: delete all Entities on your field.
+  // Seiji Tenno — no text
+  // Prima — Your Entities gain timeless and fated; +2 for each they already have. When read: read all your Entities.
   'SOFA-097': {
     onEnter: (s, _self, owner) => {
-      log(s, 'Prima: your Entities get timeless and fated (+2 for each they already have).')
+      log(s, 'Prima: your Entities gain timeless and fated (+2 for each they already have).')
       for (const e of imagined(s, owner)) {
         const had = ['timeless', 'fated'].filter((t) => hasTrait(s, e.c.uid, t))
         for (const t of ['timeless', 'fated']) if (!had.includes(t)) giveTrait(s, e.c.uid, t)
@@ -473,70 +726,126 @@ export const EFFECTS: Record<string, Effect> = {
       }
     },
     onDeleted: (s, _self, owner) => {
-      // HOUSE RULE: deletes the Entities imagined when it resolves (incl. the one revealed under Prima);
-      // Entities revealed by these deletions stay.
-      log(s, `Prima: delete all Entities on ${s.players[owner].name}'s field.`)
+      // HOUSE RULE: reads the Entities imagined when it resolves (incl. the one revealed under Prima);
+      // Entities revealed by these readings stay.
+      log(s, `Prima: read all of ${s.players[owner].name}'s Entities.`)
       for (const e of imagined(s, owner)) destroy(s, e.c.uid, false)
     },
   },
-  // Kazuki Amagiri — When instanced: Remember 1 Word [Domain: Fate, Echo: 2]
-  'SOFA-F04': { onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Echo 2 Word', chantOf('Fate', 2)) },
 
-  // ---------- V2 Words (green). [B] triggers when the Word joins your Chant. ----------
-  // Tuning Hum — resonant → ~2 your Entities [Domain: Music]
-  'SI-C01': {
-    onEnter: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s, owner).filter((e) => card(e.c).domain === 'Music').map((e) => e.c.uid), 2, true, 'resonant', {}, ['of your Music Entities', 'of your Music Entities']),
+  // ---------- Words (green). [B] happens when the Word lands in your Chant; Whisper Words can also be played in a fight. ----------
+  // Rhapsody of Courage — Whisper. Before a fight: 1 Entity gains brave this turn. Or, before or during a fight: 1 Entity gets +2 for that fight.
+  'SOFA-041': {
+    onEnter: (s, self, owner) => traitTo(s, self, owner, yours(s, owner), 1, false, 'brave', { oneTurn: true }, ['of your Entities', 'of your Entities']),
+    onWhisper: (s, self, owner) => onFighter(s, self, owner, (uid) => {
+      const m = (s.mods[uid] = modsOf(s, uid))
+      m.fightBonus = (m.fightBonus ?? 0) + 2
+      log(s, `Rhapsody of Courage: ${nameOf(s, uid)} gets +2 for this fight.`)
+    }),
   },
-  // Lullaby — pacifist → 1 opponent's Entity [until the end of their next turn]
-  'SI-C02': {
-    onEnter: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, false, 'pacifist', { untilTurn: s.turn + 1 }, ["opponent's Entity", "opponent's Entities"]),
+  // Symphony of Illusion — 1 Entity gains stealth this turn. Echo (Whisper), during a fight: the fight ends.
+  'SOFA-042': {
+    // HOUSE RULE: stealth lasts until your next turn (its rulebook meaning), so it protects through the opponent's turn.
+    onEnter: (s, self, owner) => traitTo(s, self, owner, yours(s, owner), 1, false, 'stealth', { untilTurn: s.turn + 1 }, ['of your Entities', 'of your Entities']),
+    onWhisper: (s) => fightEnds(s, 'Symphony of Illusion'),
   },
-  // Rising Chorus — brave → ~3 your Entities [1 turn]. Your resonant Entities get +1.
-  'SI-C03': {
-    onEnter: (s, self, owner) => {
-      log(s, 'Rising Chorus: your resonant Entities get +1.')
-      for (const e of imagined(s, owner)) if (hasTrait(s, e.c.uid, 'resonant')) addBonus(s, e.c.uid, 1)
-      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 3, true, 'brave', { oneTurn: true }, ['of your Entities', 'of your Entities'])
-    },
-  },
-  // Grand Finale — your Entities get +2 [1 turn]. Remember 1 Entity [Domain: Music].
-  'SI-C04': {
-    onEnter: (s, self, owner) => {
-      log(s, 'Grand Finale: your Entities get +2 this turn.')
-      for (const e of imagined(s, owner)) addBonus(s, e.c.uid, 2, true)
-      remember(s, self, owner, 'Music Entity', (k) => k.type === 'Entity' && k.domain === 'Music')
-    },
-  },
-  // Read the Stars — look at the top 3 cards of your Memories; put any of them on the bottom.
-  'SI-C05': {
-    onEnter: (s, self, owner) => {
-      const options = s.players[owner].memories.slice(0, 3).map((c) => c.uid)
-      ask(s, { player: owner, sourceUid: self.uid, zone: 'memories', options, min: 0, max: options.length, effect: 'bottom', data: { src: nm(self), draw: true },
-        prompt: 'Read the Stars: these are the top 3 cards of your Memories (the next ones you flip or draw). Choose any to put on the bottom, then draw 1.' },
-      'Read the Stars: your Memories are empty.')
-    },
-  },
-  // Twist of Fate — fated → 1 your Entity. starless → ~1 opponent's Entity.
-  'SI-C06': {
-    onEnter: (s, self, owner) => {
-      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fated', {}, ['of your Entities', 'of your Entities'])
-      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, true, 'starless', {}, ["opponent's Entity", "opponent's Entities"])
-    },
-  },
-  // Starfall — flip 3. Your opponent loses 1 Essence for every 2 stars you flipped.
-  'SI-C07': {
+  // Harmony of Healing — Your Values can't be revealed until your next turn. Echo: draw 1.
+  'SOFA-043': {
     onEnter: (s, _self, owner) => {
-      const pl = s.players[owner]
-      const flipped = flipCards(s, owner, 3)
-      const stars = flipped.reduce((n, c) => n + card(c).stars, 0)
-      log(s, `Starfall: ${pl.name} flips ${flipped.map((c) => `${card(c).name} (${card(c).stars}★)`).join(', ') || 'nothing'}: ${stars} star${stars === 1 ? '' : 's'}.`)
-      const n = Math.floor(stars / 2)
-      if (n) {
-        log(s, `Starfall: ${s.players[other(owner)].name} loses ${n} Value${n === 1 ? '' : 's'}.`)
-        loseEssence(s, other(owner), n, 'Starfall')
-      } else log(s, 'Starfall: not enough stars.')
+      s.players[owner].shieldUntil = s.turn + 1
+      log(s, `Harmony of Healing: ${s.players[owner].name}'s Values can't be revealed until their next turn.`)
+    },
+    onEcho: (s, _self, owner) => drawOne(s, owner),
+  },
+  // Crescendo of Chaos — Whisper. During a fight: 1 Entity flips 2 more cards.
+  'SOFA-044': {
+    onWhisper: (s, self, owner) => onFighter(s, self, owner, (uid) => {
+      const m = (s.mods[uid] = modsOf(s, uid))
+      m.fightFlips = (m.fightFlips ?? 0) + 2
+      log(s, `Crescendo of Chaos: ${nameOf(s, uid)} flips 2 more cards if it flips.`)
+    }),
+  },
+  // Forgotten Voice: Aria — Remember 1 Music Entity of Chapter 3 and continue any Story with it.
+  'SOFA-045': {
+    // HOUSE RULE: "any Story" = any of your Stories, ignoring the Chapter order and the once-per-turn move.
+    onEnter: (s, self, owner) => remember(s, self, owner, 'Music Chapter 3 Entity', entityOf(['Music'], 3), 'any'),
+  },
+  // Sakura Blossom Call — Not during a fight: remember 1 Fate Entity of Chapter 1 and continue a Story that has a Familiar. Echo: draw 1.
+  'SOFA-046': {
+    onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Chapter 1 Entity', entityOf(['Fate'], 1), 'familiar'),
+    onEcho: (s, _self, owner) => drawOne(s, owner),
+  },
+  // Crimson Vengeance — 1 Entity gains brave. When an Entity is read: 1 Entity gets +2 this turn. Echo: forget 1 card, draw 1.
+  'SOFA-047': {
+    onEnter: (s, self, owner) => traitTo(s, self, owner, yours(s, owner), 1, false, 'brave', {}, ['of your Entities', 'of your Entities']),
+    // HOUSE RULE: while it sits in your Chant, any Entity being read triggers it; +2 goes to one of yours.
+    onEntityRead: (s, self, owner) => ask(s, { player: owner, sourceUid: self.uid, zone: 'field', options: yours(s, owner), min: 1, max: 1, effect: 'bonus',
+      data: { src: 'Crimson Vengeance', n: 2, oneTurn: true }, prompt: 'Crimson Vengeance: an Entity was read. Choose 1 of your Entities: it gets +2 this turn.' }, ''),
+    onEcho: (s, self, owner) => forgetCards(s, self, owner, 1, 1),
+  },
+  // Clear Skies Knowledge — Draw 1, forget 1 card, and 1 Entity gains fated. Echo: do it again.
+  'SOFA-048': {
+    onEnter: (s, self, owner) => clearSkies(s, self, owner),
+    onEcho: (s, self, owner) => clearSkies(s, self, owner),
+  },
+  // Storm Dragon Roar — Whisper. Before a fight: the fight ends. During a fight: your Entity gets +3. After a fight your Entity won: draw 1.
+  'SOFA-049': {
+    onWhisper: (s, self, owner) => ask(s, {
+      player: owner, sourceUid: self.uid, zone: 'option', options: ['boost', 'end'], min: 1, max: 1, effect: 'storm',
+      data: { src: 'Storm Dragon Roar', 'label.boost': 'Your Entity gets +3 (draw 1 if it wins)', 'label.end': 'The fight ends' },
+      prompt: 'Storm Dragon Roar: choose one.',
+    }, ''),
+  },
+  // The Way of the Sword — Whisper. During a fight: if your Entity is a Samurai, it gains brave, fated, inspiring and timeless this turn; +1 for each it already has.
+  'SOFA-050': {
+    onWhisper: (s, self, owner) => onFighter(s, self, owner, (uid) => {
+      const c = imagined(s, owner).find((e) => e.c.uid === uid)!.c
+      if (!card(c).title?.includes('Samurai')) return log(s, `The Way of the Sword: ${card(c).name} is not a Samurai, nothing happens.`)
+      const traits = ['brave', 'fated', 'inspiring', 'timeless']
+      const had = traits.filter((t) => hasTrait(s, uid, t))
+      for (const t of traits) if (!had.includes(t)) giveTrait(s, uid, t, { oneTurn: true })
+      if (had.length) addBonus(s, uid, had.length, true)
+      log(s, `The Way of the Sword: ${card(c).name} gains brave, fated, inspiring and timeless this turn${had.length ? ` (+${had.length} for those it had)` : ''}.`)
+    }),
+  },
+
+  // ---------- Relics (gold): equipped to a Story, they power whichever Entity is on top (rulebook §6b) ----------
+  // Magician Blade — Equip to a Story: its Entity gains fated.
+  'SOFA-056': { relicGrant: (e) => grantTo(e, 'fated') },
+  // Fallen's Shield — Your Values can't be revealed. At the end of your turn: reveal 1 of your Values. (the shield is in loseEssence)
+  'SOFA-057': {
+    relicEndOfTurn: (s, _self, owner) => {
+      log(s, `Fallen’s Shield: ${s.players[owner].name} reveals 1 Value at the end of their turn.`)
+      loseEssence(s, owner, 1, 'Fallen’s Shield', undefined, true)
     },
   },
+  // Star's Reach — Forget 1 card. Equip to a Story: its Entity gains sneaky.
+  'SOFA-058': {
+    onEquip: (s, self, owner) => forgetCards(s, self, owner, 1),
+    relicGrant: (e) => grantTo(e, 'sneaky'),
+  },
+  // Ruler's Insignia — Equip to a Story: its Entity gains inspiring.
+  'SOFA-059': { relicGrant: (e) => grantTo(e, 'inspiring') },
+  // Devil Drinker — Reveal 1 of your Values. Equip to a Story: its Entity gains dual-striker; it is read at the end of your next turn. Playable from your Reverie.
+  'SOFA-060': {
+    onEquip: (s, _self, owner) => {
+      log(s, `Devil Drinker: ${s.players[owner].name} reveals 1 Value.`)
+      loseEssence(s, owner, 1, 'Devil Drinker', undefined, true)
+    },
+    relicGrant: (e) => grantTo(e, 'dual-striker'),
+    relicEndOfTurn: (s, _self, _owner, story) => {
+      if (story.relicTurn === undefined || story.relicTurn < 0 || s.turn < story.relicTurn + 2) return
+      story.relicTurn = -1
+      log(s, `Devil Drinker: ${card(top(story)).name} is read at the end of the turn.`)
+      destroy(s, top(story).uid, false)
+    },
+  },
+}
+
+/** Clear Skies Knowledge: draw 1, forget 1 card, and 1 Entity gains fated. */
+function clearSkies(s: GameState, self: CardInst, owner: PlayerIdx) {
+  log(s, `Clear Skies Knowledge: ${s.players[owner].name} draws 1.`)
+  drawOne(s, owner)
+  forgetCards(s, self, owner, 1)
+  traitTo(s, self, owner, imagined(s).map((e) => e.c.uid), 1, false, 'fated', {}, ['Entity', 'Entities'])
 }

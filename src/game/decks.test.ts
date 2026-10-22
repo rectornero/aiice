@@ -73,31 +73,33 @@ describe('validateDeck', () => {
     expect(validateDeck([...STARTER_DECKS.music.cards, 'SOFA-003']).ok).toBe(false)
   })
 
-  it('allows at most 3 copies', () => {
-    const cards = [...rep('SOFA-001', 4), ...STARTER_DECKS.music.cards.slice(4)]
+  it('allows at most 2 copies', () => {
+    const cards = [...rep('SOFA-001', 3), ...STARTER_DECKS.music.cards.slice(3)]
     expect(cards).toHaveLength(20)
-    expect(validateDeck(cards).problems).toEqual(['Aqua Beat: 4 copies (max 3).'])
+    expect(validateDeck(cards).problems).toEqual(['Aqua Beat: 3 copies (max 2).'])
   })
 
-  it('allows only Entities and known cards', () => {
-    const cards = [...STARTER_DECKS.music.cards.slice(2), 'SOFA-R01', 'NOPE-1']
-    expect(validateDeck(cards).problems).toEqual(['Aqualith is a Relic; only Entities and Words can be played for now.', 'Unknown card NOPE-1.'])
+  it('allows Entities, Words and Relics, and only known cards', () => {
+    const cards = [...STARTER_DECKS.music.cards.slice(2), 'SOFA-056', 'NOPE-1']
+    expect(validateDeck(cards).problems).toEqual(['Unknown card NOPE-1.'])
   })
 
   it('warns about few Chapter 1 Entities and Chapter gaps', () => {
-    const cards = [...rep('SOFA-001', 3), ...rep('SOFA-002', 2), ...rep('SOFA-096', 3), ...rep('SOFA-M05', 3), ...rep('SOFA-097', 3), ...rep('SOFA-F04', 3), ...rep('SOFA-M03', 3)]
+    const cards = [...rep('SOFA-001', 2), ...rep('SOFA-002', 2), 'SOFA-003', ...rep('SOFA-010', 2), ...rep('SOFA-011', 2), ...rep('SOFA-012', 2), ...rep('SOFA-008', 2),
+      ...rep('SOFA-019', 2), ...rep('SOFA-096', 2), ...rep('SOFA-041', 2), 'SOFA-042']
     expect(validateDeck(cards)).toEqual({
       ok: true,
       problems: [],
       warnings: ['Only 5 Chapter 1 Entities: 6+ are recommended to start Stories.'],
     })
-    const gap = [...rep('SOFA-001', 3), ...rep('SOFA-002', 3), ...rep('SOFA-003', 3), ...rep('SOFA-096', 3), ...rep('SOFA-M05', 3), ...rep('SOFA-097', 3), ...rep('SOFA-F04', 2)]
+    const gap = [...rep('SOFA-001', 2), ...rep('SOFA-002', 2), ...rep('SOFA-003', 2), ...rep('SOFA-004', 2), ...rep('SOFA-005', 2), ...rep('SOFA-096', 2),
+      ...rep('SOFA-041', 2), ...rep('SOFA-042', 2), ...rep('SOFA-043', 2), ...rep('SOFA-044', 2)]
     expect(validateDeck(gap).warnings).toEqual(['Chapter 3 Entities but no Chapter 2 to continue a Story from.'])
   })
 
   it('counts the chapter curve', () => {
-    expect(chapterCurve(STARTER_DECKS.fate.cards)).toEqual({ 1: 7, 2: 5, 3: 2 })
-    expect(chapterCurve(['SOFA-R01', 'NOPE'])).toEqual({})
+    expect(chapterCurve(STARTER_DECKS.fate.cards)).toEqual({ 1: 8, 2: 6, 3: 1 })
+    expect(chapterCurve(['SOFA-056', 'NOPE'])).toEqual({})
   })
 })
 
@@ -109,13 +111,13 @@ describe('deck codes', () => {
       expect(back.unknown).toEqual([])
       expect(sortCardIds(back.cards)).toEqual(sortCardIds(d.cards))
     }
-    expect(deckCode({ cards: ['SOFA-M01', 'SOFA-001', 'SOFA-001'] })).toBe('SOFA-001x2 SOFA-M01x1')
+    expect(deckCode({ cards: ['SOFA-010', 'SOFA-001', 'SOFA-001'] })).toBe('SOFA-001x2 SOFA-010x1')
   })
 
   it('parses loosely written codes', () => {
-    const r = parseDeckCode('Deck: sofa-001x3, SOFA002 x2;\n3x SOFA-M01 2 SOFA-024 SOFA-025*2 SOFA-096 SOFA-999x2 hello')
+    const r = parseDeckCode('Deck: sofa-001x3, SOFA002 x2;\n3x SOFA-010 2 SOFA-024 SOFA-025*2 SOFA-096 SOFA-999x2 hello')
     expect(r.cards).toEqual([
-      ...rep('SOFA-001', 3), ...rep('SOFA-002', 2), ...rep('SOFA-M01', 3), ...rep('SOFA-024', 2), ...rep('SOFA-025', 2), 'SOFA-096',
+      ...rep('SOFA-001', 3), ...rep('SOFA-002', 2), ...rep('SOFA-010', 3), ...rep('SOFA-024', 2), ...rep('SOFA-025', 2), 'SOFA-096',
     ])
     expect(r.unknown).toEqual(['SOFA-999'])
   })
@@ -128,9 +130,9 @@ describe('deck codes', () => {
 
 describe('Subconscious (V2.7)', () => {
   it('round-trips through a deck code with a "/" part', () => {
-    const d = { cards: ['SOFA-001', 'SOFA-001'], subconscious: ['SOFA-004', 'SI-C02'] }
-    expect(deckCode(d)).toBe('SOFA-001x2 / SI-C02x1 SOFA-004x1')
-    expect(parseDeckCode(deckCode(d))).toEqual({ cards: ['SOFA-001', 'SOFA-001'], subconscious: ['SI-C02', 'SOFA-004'], unknown: [] })
+    const d = { cards: ['SOFA-001', 'SOFA-001'], subconscious: ['SOFA-004', 'SOFA-041'] }
+    expect(deckCode(d)).toBe('SOFA-001x2 / SOFA-041x1 SOFA-004x1')
+    expect(parseDeckCode(deckCode(d))).toEqual({ cards: ['SOFA-001', 'SOFA-001'], subconscious: ['SOFA-041', 'SOFA-004'], unknown: [] })
   })
 
   it('needs exactly 10 cards and counts copies across both parts', () => {

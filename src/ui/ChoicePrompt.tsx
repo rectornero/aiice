@@ -33,11 +33,27 @@ export function ChoiceBar({ ch, picks, onConfirm, onShowCards }: {
 }
 
 /** Choice among cards in Memories or Thoughts: a grid of the options to toggle. */
-export function ChoiceModal({ s, ch, picks, toggle, onConfirm, onHide }: {
+export function ChoiceModal({ s, ch, picks, toggle, onConfirm, onHide, onPick }: {
   s: GameState; ch: PendingChoice; picks: string[]; toggle: (uid: string) => void; onConfirm: () => void; onHide: () => void
+  /** option choices: answer at once */
+  onPick?: (picks: string[]) => void
 }) {
   const pl = s.players[ch.player]
-  const pool = ch.zone === 'memories' ? pl.memories : ch.zone === 'essence' ? pl.essenceStack.map((e) => e.c) : pl.thoughts
+  if (ch.zone === 'option') {
+    return (
+      <div className="overlay">
+        <div className="dialog">
+          <h2>{ch.prompt}</h2>
+          <div className="col gap">
+            {ch.options.map((o) => (
+              <button key={o} className="btn primary big" onClick={() => onPick?.([o])}>{String(ch.data?.[`label.${o}`] ?? o)}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  const pool = ch.zone === 'memories' ? pl.memories : ch.zone === 'essence' ? pl.essenceStack.map((e) => e.c) : ch.zone === 'discard' ? pl.discard : pl.thoughts
   const opts = ch.options.map((uid) => pool.find((c) => c.uid === uid)).filter((c) => !!c)
   return (
     <div className="overlay">
@@ -46,7 +62,7 @@ export function ChoiceModal({ s, ch, picks, toggle, onConfirm, onHide }: {
           <h2>{ch.prompt}</h2>
           <button className="btn ghost sm" onClick={onHide}>See board</button>
         </div>
-        <div className="muted">{countText(ch)} from your {ch.zone === 'memories' ? 'Memories' : ch.zone === 'essence' ? 'revealed Values' : 'Thoughts'} · {picks.length} chosen</div>
+        <div className="muted">{countText(ch)} from your {ch.zone === 'memories' ? 'Memories' : ch.zone === 'essence' ? 'revealed Values' : ch.zone === 'discard' ? 'Reverie' : 'Thoughts'} · {picks.length} chosen</div>
         <div className="grid">
           {opts.map((c) => (
             <CardView key={c.uid} card={card(c)} size="sm" selected={picks.includes(c.uid)} onClick={() => toggle(c.uid)}

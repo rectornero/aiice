@@ -6,7 +6,7 @@
 import { CARD_BY_ID, type Card } from './cards'
 import { whoMustAct, type BotPolicy } from './driver'
 import {
-  attackTargets, canActivate, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, hasHeartMark, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
+  attackTargets, canActivate, canAttackPlayer, canEquip, canWhisper, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, hasHeartMark, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
   type Action, type CardInst, type FightMode, type GameState, type PendingChoice, type PlayerIdx, type Story,
 } from './engine'
 
@@ -109,10 +109,10 @@ function storyValue(s: GameState, p: PlayerIdx, st: Story) {
   const traits = traitsOf(s, c.uid)
   if (traits.includes(UNDELETABLE)) return 0
   // timeless (and Kurogane's own text): its owner loses 1 Essence instead, the game's real currency
-  if (traits.includes('timeless') || /instead lose \d+ (Essence|Value)/i.test(cardOf(c).text)) return s.players[p].essence <= (RULES.heart ? 0 : 1) ? 100 : 12 / (s.players[p].essence + (RULES.heart ? 1 : 0)) + 2
+  if (traits.includes('timeless') || /reveal 1 of your Values instead/i.test(cardOf(c).text)) return s.players[p].essence <= (RULES.heart ? 0 : 1) ? 100 : 12 / (s.players[p].essence + (RULES.heart ? 1 : 0)) + 2
   let v = 1 + strength(s, p, c) + 0.5 * cardOf(c).chapter
   // "When deleted: delete all Entities on your field" (Prima)
-  if (/When deleted: delete all/i.test(cardOf(c).text)) v += 2 * (s.players[p].stories.length - 1) + 2
+  if (/When read: read all/i.test(cardOf(c).text)) v += 2 * (s.players[p].stories.length - 1) + 2
   // losing your last Entity opens you to direct attacks
   if (st.cards.length === 1 && s.players[p].stories.length === 1) v += 3
   // V2.2: a Story laid bare reaches the Essence
@@ -139,6 +139,54 @@ function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: Play
   return best
 }
 
+/** For player p in the pending fight: chance to win minus chance to lose, with its best mode against the other side's
+ *  best answer (the attacker's hidden mode is assumed to be what our own attack model would pick). No fight: 0. */
+function fightValue(s: GameState, p: PlayerIdx): number {
+  const f = s.pendingFight
+  if (!f) return 0
+  const aSt = s.players[f.attacker.player].stories.find((st) => st.id === f.attacker.storyId)
+  const dSt = s.players[f.defender.player].stories.find((st) => st.id === f.defender.storyId)
+  if (!aSt || !dSt) return 0
+  const atk = { p: f.attacker.player, st: aSt }
+  const def = { p: f.defender.player, st: dSt }
+  const o = (ma: FightMode, md: FightMode) => odds(sideDist(s, atk.p, topOf(aSt), ma, 'attacker'), sideDist(s, def.p, topOf(dSt), md, 'defender'), ma, md)
+  if (p === atk.p) return Math.max(...MODES.map((ma) => Math.min(...MODES.map((md) => { const x = o(ma, md); return x.win - x.lose }))))
+  const am = attackEV(s, atk, def).mode
+  return Math.max(...MODES.map((md) => { const x = o(am, md); return x.lose - x.win }))
+}
+
+/** Whisper Words and "Before a fight" abilities that clearly help our side of the pending fight. */
+function goodFightPlays(s: GameState, p: PlayerIdx): Action[] {
+  const base = fightValue(s, p)
+  const cands: { a: Action; v: number }[] = []
+  const tryIt = (a: Action) => {
+    let next = reduce(s, a)
+    if (next === s) return
+    // a follow-up choice (Storm Dragon Roar): assume we answer it well
+    const ch = next.choices[0]
+    if (ch && ch.player === p) next = reduce(next, { t: 'choose', player: p, picks: smartPicks(next, ch) })
+    cands.push({ a, v: fightValue(next, p) })
+  }
+  for (const c of s.players[p].thoughts) if (!canWhisper(s, p, c)) tryIt({ t: 'whisper', player: p, uid: c.uid })
+  for (const st of s.players[p].stories) if (!canActivate(s, topOf(st).uid)) tryIt({ t: 'activate', uid: topOf(st).uid })
+  // a card is worth spending only for a real swing
+  return cands.filter((x) => x.v > base + 0.2).sort((x, y) => y.v - x.v).map((x) => x.a)
+}
+
+/** Relics to equip: onto our most valuable Story without one. Devil Drinker and Fallen's Shield cost Values, so the bot leaves them. */
+function goodEquips(s: GameState, p: PlayerIdx): Action[] {
+  const pl = s.players[p]
+  const stories = [...pl.stories].filter((st) => !st.relic).sort((a, b) => storyValue(s, p, b) - storyValue(s, p, a))
+  const out: Action[] = []
+  for (const c of pl.thoughts) {
+    if (cardOf(c).type !== 'Relic' || c.cardId === 'SOFA-060' || c.cardId === 'SOFA-057') continue
+    if (c.cardId === 'SOFA-058' && pl.thoughts.length < 3) continue // Star's Reach costs a card
+    const st = stories.find((x) => !canEquip(s, p, c, x))
+    if (st) out.push({ t: 'equip', uid: c.uid, storyId: st.id })
+  }
+  return out
+}
+
 // ---------- choices ----------
 
 const HARMFUL_WORDS = /starless|delet|doomed|pacifist|inoffensive|forget|discard|\blose|can.?t|−\d|-\d/i
@@ -149,7 +197,8 @@ const harmfulChoice = (ch: PendingChoice) => HARMFUL_WORDS.test(ch.prompt.slice(
 function handValue(s: GameState, p: PlayerIdx, c: CardInst) {
   const k = cardOf(c)
   const pl = s.players[p]
-  let v = k.type === 'Entity' ? Math.max(k.sure, k.fate * avgStars(s, p)) + k.chapter : 1
+  // Words and Relics: a Whisper or a Relic is worth about a small Entity
+  let v = k.type === 'Entity' ? Math.max(k.sure, k.fate * avgStars(s, p)) + k.chapter : k.type === 'Relic' ? 3 : k.whisper ? 3 : 2
   if (k.type === 'Entity' && pl.stories.some((st) => cardOf(topOf(st)).chapter + 1 === k.chapter)) v += 4
   if (k.type === 'Entity' && k.chapter === 1 && pl.stories.length < 3) v += 1
   return v
@@ -176,7 +225,17 @@ function smartPicks(s: GameState, ch: PendingChoice): string[] {
     const good = ranked.filter((uid) => score(uid) > 0)
     return ranked.slice(0, Math.max(min, Math.min(max, good.length)))
   }
+  // Storm Dragon Roar and other option choices: try each and keep the best fight for us
+  if (ch.zone === 'option') {
+    const best = [...ch.options].sort((a, b) => fightValue(reduce(s, { t: 'choose', player: p, picks: [b] }), p) - fightValue(reduce(s, { t: 'choose', player: p, picks: [a] }), p))
+    return best.slice(0, 1)
+  }
   const cards = [...s.players[p].memories, ...s.players[p].thoughts, ...s.players[p].discard, ...s.players[p].essenceStack.map((e) => e.c)]
+  // setup: the 5 Values. Keep strong cards and Heart marks (they only touch when flipped from Memories) out of the Essence
+  if (ch.effect === 'values') {
+    const keep = (uid: string) => { const c = cards.find((x) => x.uid === uid); return c ? handValue(s, p, c) + (hasHeartMark(c) ? 4 : 0) + cardOf(c).stars : 0 }
+    return [...ch.options].sort((a, b) => keep(a) - keep(b)).slice(0, ch.min)
+  }
   // "put any on the bottom" (Read the Stars): keep stars on top for flips, send 0-star cards away
   if (ch.effect === 'bottom') return ch.options.filter((uid) => { const c = cards.find((x) => x.uid === uid); return !!c && cardOf(c).stars === 0 })
   const val = (uid: string) => {
@@ -245,6 +304,7 @@ function turnActions(s: GameState, p: PlayerIdx): Action[] {
       for (const st of pl.stories) if (canContinue(s, p, c, st)) out.push({ t: 'continue', uid: c.uid, storyId: st.id })
     }
     for (const c of pl.thoughts) if (!canChant(s, p, c)) out.push({ t: 'chant', uid: c.uid })
+    for (const c of pl.thoughts) for (const st of pl.stories) if (!canEquip(s, p, c, st)) out.push({ t: 'equip', uid: c.uid, storyId: st.id })
     out.push({ t: 'toFight' })
   } else {
     const foeStories = attackTargets(s, foeOf(p))
@@ -357,8 +417,10 @@ function goodAttacks(s: GameState, p: PlayerIdx): Action[] {
   const mine = s.players[p].stories.filter((st) => !canAttack(s, st))
   const foe = foeOf(p)
   const theirs = attackTargets(s, foe)
-  if (!theirs.length) return mine.map((st) => ({ t: 'attack', storyId: st.id, target: 'player' }))
+  if (!theirs.length) return mine.filter((st) => canAttackPlayer(s, st)).map((st) => ({ t: 'attack', storyId: st.id, target: 'player' }))
   const cands: { a: Action; v: number }[] = []
+  // sneaky: reach the Essence past their Entities
+  for (const st of mine) if (canAttackPlayer(s, st)) cands.push({ a: { t: 'attack', storyId: st.id, target: 'player' }, v: essenceWorth(s, foe) })
   for (const st of mine)
     for (const t of theirs) {
       const { ev } = attackEV(s, { p, st }, { p: foe, st: t })
@@ -378,6 +440,7 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
     const aSt = s.players[f.attacker.player].stories.find((st) => st.id === f.attacker.storyId)
     const dSt = s.players[f.defender.player].stories.find((st) => st.id === f.defender.storyId)
     if (aSt && dSt) {
+      yield* goodFightPlays(s, p)
       if (p === f.attacker.player) {
         yield { t: 'chooseMode', player: p, mode: attackEV(s, { p, st: aSt }, { p: f.defender.player, st: dSt }).mode }
       } else {
@@ -401,11 +464,12 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
     return
   }
   const actives = s.players[p].stories.map((st) => topOf(st).uid).filter((uid) => !canActivate(s, uid))
-  const oneTurn = (uid: string) => /\[1 turn\]|until the end of (the|this) turn/i.test(cardOf(topOf(storyOf(s, uid)!.st)).text)
+  const oneTurn = (uid: string) => /\[1 turn\]|this turn|until the end of (the|this) turn/i.test(cardOf(topOf(storyOf(s, uid)!.st)).text)
   if (s.phase === 'main') {
     yield* goodSwap(s, p)
     yield* bestContinue(s, p)
     yield* bestStarts(s, p)
+    yield* goodEquips(s, p)
     for (const uid of actives) if (!oneTurn(uid) && activationHelps(s, p, uid)) yield { t: 'activate', uid }
     yield* goodChants(s, p)
     if (s.players[p].stories.some((st) => !canAttack({ ...s, phase: 'fight' }, st))) yield { t: 'toFight' }

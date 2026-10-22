@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cardName } from '../game/cards'
 import { whoMustAct, type MatchSetup } from '../game/driver'
 import {
-  attackTargets, bonusDetails, canActivate, canSwapEssence, canAttack, canChant, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, RULES, sureOf, top, traitDetails, traitsOf,
+  attackTargets, bonusDetails, canActivate, canAttackPlayer, canEquip, canSwapEssence, canAttack, canChant, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, RULES, sureOf, top, traitDetails, traitsOf,
   type Action, type CardInst, type GameState, type PlayerIdx, type Story, type TraitInfo,
 } from '../game/engine'
 import { CardDetails, CardText, CardView } from './CardView'
@@ -11,7 +11,7 @@ import { FightChoice, FightReveal } from './FightView'
 import { EssenceCall } from './EssenceCall'
 import { useMatch, type MatchMode, type NetStatus } from './useMatch'
 
-const TRAITS = ['brave', 'resonant', 'fated', 'starless', 'pacifist', 'defender', 'timeless', 'charming', 'inoffensive', 'ethereal']
+const TRAITS = ['brave', 'inoffensive', 'charming', 'defender', 'pacifist', 'fated', 'starless', 'timeless', 'inspiring', 'stealth', 'sneaky', 'dual-striker', 'music']
 
 type Sel =
   | { kind: 'hand'; uid: string }
@@ -154,7 +154,7 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
           clickChant={(uid) => setSel({ kind: 'chant', uid })} />
         <div className="hand">
           {s.players[me].thoughts.map((c) => {
-            const playable = myMove && s.phase === 'main' && (canStart(s, me, c) || !canChant(s, me, c) || s.players[me].stories.some((st) => canContinue(s, me, c, st)))
+            const playable = myMove && s.phase === 'main' && (canStart(s, me, c) || !canChant(s, me, c) || s.players[me].stories.some((st) => canContinue(s, me, c, st) || !canEquip(s, me, c, st)))
             return (
               <CardView key={c.uid} card={card(c)} size="sm" selected={sel?.kind === 'hand' && sel.uid === c.uid}
                 badge={playable ? '▲' : undefined} onClick={() => setSel({ kind: 'hand', uid: c.uid })} />
@@ -186,7 +186,8 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
 
       {s.pendingFight && !ch && must === me && <FightChoice s={s} player={me} act={act} />}
       {myChoice && myChoice.zone !== 'field' && !choiceHidden && (
-        <ChoiceModal s={s} ch={myChoice} picks={picks} toggle={toggle} onConfirm={confirm} onHide={() => setChoiceHidden(true)} />
+        <ChoiceModal s={s} ch={myChoice} picks={picks} toggle={toggle} onConfirm={confirm} onHide={() => setChoiceHidden(true)}
+          onPick={(p) => act({ t: 'choose', player: me, picks: p })} />
       )}
       {revealView}
       {callView}
@@ -244,9 +245,8 @@ function hintFor(s: GameState, me: PlayerIdx, mode: MatchMode, botThinking: bool
   const foe = s.players[other(me)]
   if (armed) {
     const guarded = foe.stories.length > attackTargets(s, other(me)).length
-    return foe.stories.length > 0 ? <>Tap {guarded ? 'a glowing defender' : 'an enemy Entity'} to attack it with <b>{card(top(armed)).name}</b></> : (
-      <button className="btn danger sm" onClick={attackPlayer}>⚔ Attack {foe.name} directly</button>
-    )
+    const direct = canAttackPlayer(s, armed) && <button className="btn danger sm" onClick={attackPlayer}>⚔ Attack {foe.name} directly</button>
+    return foe.stories.length > 0 ? <>Tap {guarded ? 'a glowing defender' : 'an enemy Entity'} to attack it with <b>{card(top(armed)).name}</b>{direct && <> or {direct}</>}</> : direct
   }
   if (pl.stories.some((st) => !canAttack(s, st))) return 'Tap a glowing Entity to attack'
   return 'End your turn'
@@ -291,7 +291,7 @@ function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile, clickChant }:
         <div className="pile-links">
           {!mine && <span className="muted small">✋{pl.thoughts.length}</span>}
           <button className="btn ghost sm" disabled={!mine} onClick={() => openPile('memories')} title="Memories (deck)">🂠 {pl.memories.length}</button>
-          <button className="btn ghost sm" onClick={() => openPile('discard')} title="Discard pile">🗑 {pl.discard.length}</button>
+          <button className="btn ghost sm" onClick={() => openPile('discard')} title="Reverie (discard pile)">☁ {pl.discard.length}</button>
         </div>
       </div>
       {mine ? <>{stories}{chants}</> : <>{chants}{stories}</>}
@@ -340,6 +340,7 @@ function StoryView({ s, st, glow, selected, onClick }: { s: GameState; st: Story
           <div className="chips">
             <TraitChips s={s} uid={t.uid} short />
             {uses ? <span className="chip uses">{'{'}{uses - spent}{'}'}</span> : null}
+            {st.relic && <span className="chip relic" title={`Relic: ${cardName(card(st.relic))}`}>⚱ {card(st.relic).name}</span>}
           </div>
         } />
     </div>
@@ -361,6 +362,13 @@ function HandActions({ s, me, c, canPlay, act, done }: {
   const noChant = card(c).type === 'Word' ? canChant(s, me, c) : null
   return (
     <div className="actions">
+      {myTurn && card(c).type === 'Relic' && s.players[me].stories.filter((st) => !canEquip(s, me, c, st)).map((st) => (
+        <button key={st.id} className="btn gold" onClick={() => { act({ t: 'equip', uid: c.uid, storyId: st.id }); done() }}>
+          ⚱ Equip to {card(top(st)).name}'s Story{st.relic ? ` (forgets ${card(st.relic).name})` : ''}
+        </button>
+      ))}
+      {myTurn && card(c).type === 'Relic' && !s.players[me].stories.length && <div className="muted">Start a Story first: Relics are equipped to Stories.</div>}
+      {card(c).whisper && <div className="muted small">Whisper: you can also play it during a fight, before you choose sure hit or flip.</div>}
       {myTurn && card(c).type === 'Word' && (noChant === null ? (
         <button className="btn green" onClick={() => { act({ t: 'chant', uid: c.uid }); done() }}>
           Add to your Chant{s.players[me].chants.length + 1 >= RULES.maxChants ? ' (completes it)' : ''}
@@ -389,7 +397,7 @@ function HandActions({ s, me, c, canPlay, act, done }: {
       })}
       <details className="adjust">
         <summary>Adjust</summary>
-        <button className="btn ghost sm" onClick={() => { act({ t: 'forget', player: me, uid: c.uid }); done() }}>Forget (discard)</button>
+        <button className="btn ghost sm" onClick={() => { act({ t: 'forget', player: me, uid: c.uid }); done() }}>Forget (to your Reverie)</button>
       </details>
     </div>
   )
@@ -428,13 +436,15 @@ function StoryActions({ s, me, owner, story, canPlay, act, done }: {
         )
       )}
       {!mine && uses > 0 && <div className="muted">◆ {uses - spent} of {uses} uses left</div>}
+      {story.relic && <div className="muted small">⚱ Relic: <b>{cardName(card(story.relic))}</b> · <CardText text={card(story.relic).text} /></div>}
       {mine && canPlay && s.phase === 'fight' && (
         why ? <div className="muted">⚔ {why}</div> : (
           <div className="col gap">
             <b>Attack</b>
-            {foe.stories.length === 0 ? (
+            {canAttackPlayer(s, story) && (
               <button className="btn danger" onClick={() => { act({ t: 'attack', storyId: story.id, target: 'player' }); done() }}>Attack {foe.name} directly</button>
-            ) : attackTargets(s, other(me)).map((st) => (
+            )}
+            {attackTargets(s, other(me)).map((st) => (
               <button key={st.id} className="btn danger" onClick={() => { act({ t: 'attack', storyId: story.id, target: st.id }); done() }}>
                 ⚔ {cardName(card(top(st)))}
               </button>
@@ -500,7 +510,7 @@ function PileModal({ s, me, kind, player, act, close }: {
     <div className="overlay" onClick={close}>
       <div className="dialog wide" onClick={(e) => e.stopPropagation()}>
         <div className="row between gap">
-          <h2>{pl.name}'s {kind === 'memories' ? 'Memories (sorted, then shuffled)' : 'discard pile'}</h2>
+          <h2>{pl.name}'s {kind === 'memories' ? 'Memories (sorted, then shuffled)' : 'Reverie (discard pile)'}</h2>
           <button className="btn ghost" onClick={close}>Close</button>
         </div>
         {tools && (
@@ -523,6 +533,9 @@ function PileModal({ s, me, kind, player, act, close }: {
               {tools && (
                 <button className="btn sm" onClick={() => { act({ t: 'remember', player, uid: c.uid }); close() }}>Remember</button>
               )}
+              {kind === 'discard' && player === me && pl.stories.filter((st) => !canEquip(s, me, c, st)).map((st) => (
+                <button key={st.id} className="btn sm gold" onClick={() => { act({ t: 'equip', uid: c.uid, storyId: st.id }); close() }}>⚱ Equip to {card(top(st)).name}</button>
+              ))}
             </div>
           ))}
           {cards.length === 0 && <div className="muted">Empty.</div>}

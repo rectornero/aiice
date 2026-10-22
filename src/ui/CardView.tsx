@@ -3,8 +3,8 @@ import { createContext, useContext, type ReactNode } from 'react'
 import { ICONS } from '../assets/icons/icons'
 import { cardName, type Card } from '../game/cards'
 
-/** Which art cards show: game-icons placeholders (default, same look for every card) or the Figma scans where they exist. */
-export const ArtContext = createContext<'icons' | 'figma'>('icons')
+/** Which art cards show: set 1 card art (default) or the game-icons placeholders. */
+export const ArtContext = createContext<'art' | 'icons'>('art')
 
 /** Renders card text, turning [B]/[O] into the blue/orange diamonds used on the cards. */
 export function CardText({ text }: { text: string }) {
@@ -28,10 +28,13 @@ export function DomainGlyph({ domain }: { domain: string }) {
 }
 
 export function Art({ card }: { card: Card }) {
+  const mode = useContext(ArtContext)
   const d = card.icon ? ICONS[card.icon] : undefined
   return (
     <div className="art">
-      {d ? (
+      {mode === 'art' && card.image ? (
+        <img src={card.image} alt="" draggable={false} loading="lazy" />
+      ) : d ? (
         <svg viewBox="0 0 512 512" aria-hidden="true"><path d={d} /></svg>
       ) : (
         <span className="art-letter">{card.name[0]}</span>
@@ -56,15 +59,11 @@ interface Props {
 }
 
 export function CardView({ card, size = 'md', selected, dim, onClick, badge, extra, tile }: Props) {
-  const art = useContext(ArtContext)
-  const scan = art === 'figma' && card.image && !tile
   const corner = cornerOf(card)
-  const cls = `card ${size} ${tile ? 'tile' : ''} t-${card.type.toLowerCase()} dom-${card.domain.toLowerCase()} ${selected ? 'selected' : ''} ${dim ? 'dim' : ''} ${scan ? 'scan' : ''}`
+  const cls = `card ${size} ${tile ? 'tile' : ''} t-${card.type.toLowerCase()} dom-${card.domain.toLowerCase()} ${selected ? 'selected' : ''} ${dim ? 'dim' : ''}`
   return (
     <button className={cls} onClick={onClick} title={cardName(card)} type="button">
-      {scan ? (
-        <img src={card.image} alt="" draggable={false} />
-      ) : (
+      {(
         <div className="frame">
           <div className="fr-top">
             <DomainGlyph domain={card.domain} />
@@ -82,7 +81,7 @@ export function CardView({ card, size = 'md', selected, dim, onClick, badge, ext
               </>
             ) : (
               <>
-                {!tile && <span className="kind">{card.type === 'Word' ? `Echo ${card.echo ?? 1}` : card.type}</span>}
+                {!tile && <span className="kind">{card.type === 'Word' ? `${card.whisper ? 'Whisper · ' : ''}Echo ${card.echo ?? 1}` : card.type}</span>}
                 <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}
               </>
             )}
@@ -106,12 +105,9 @@ export function CardBack({ count, label, onClick }: { count?: number; label?: st
 }
 
 export function CardDetails({ card }: { card: Card }) {
-  const art = useContext(ArtContext)
   return (
     <div className="details">
-      {art === 'figma' && card.image ? <img className="details-img" src={card.image} alt={cardName(card)} /> : (
-        <div className="details-img"><CardView card={card} size="md" /></div>
-      )}
+      <div className="details-img"><CardView card={card} size="md" /></div>
       <h3>{cardName(card)}</h3>
       <div className="muted">
         {card.id} · {card.domain} {card.type}
@@ -129,13 +125,12 @@ export function CardDetails({ card }: { card: Card }) {
       {card.type === 'Word' && (
         <div className="statline">
           <span><b>Echo</b> {card.echo ?? 1}: needs {(card.echo ?? 1) - 1} Word{card.echo === 2 ? '' : 's'} already in your Chant</span>
+          {card.whisper && <span><b>Whisper</b>: can also be played from your Thoughts during a fight</span>}
           <span><b>Stars</b> <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}</span>
         </div>
       )}
       <p className="ctext"><CardText text={card.text} /></p>
       {card.flavor && <p className="flavor">“{card.flavor}”</p>}
-      {card.placeholder && <p className="warn">Name is a placeholder in Figma.</p>}
-      {card.id.startsWith('SI-') && <p className="muted small">New card from the self-iteration rules (placeholder).</p>}
     </div>
   )
 }

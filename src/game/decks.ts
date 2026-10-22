@@ -26,9 +26,9 @@ export const DECK_RULES = {
   /** V2.7: plus a Subconscious of exactly this many */
   subconsciousSize: 10,
   /** at most this many copies of one card */
-  maxCopies: 3,
-  /** only these card types can be in a deck (Relics aren't playable yet). V2: Words are playable. */
-  playableTypes: ['Entity', 'Word'] as readonly Card['type'][],
+  maxCopies: 2,
+  /** only these card types can be in a deck. V2: Words are playable. Set 1: Relics too. */
+  playableTypes: ['Entity', 'Word', 'Relic'] as readonly Card['type'][],
   /** warn when the deck has fewer Chapter 1 Entities than this (they start Stories) */
   minChapter1: 6,
 } as const
@@ -147,7 +147,7 @@ export function validateDeck(cards: string[], subconscious?: string[]): DeckChec
     for (const id of new Set(sub)) {
       const c = CARD_BY_ID[id]
       if (!c) problems.push(`Unknown card ${id} in the Subconscious.`)
-      else if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities and Words can be played for now.`)
+      else if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities, Words and Relics can be played.`)
     }
     for (const [id, n] of countCards([...cards, ...sub])) {
       const c = CARD_BY_ID[id]
@@ -160,7 +160,7 @@ export function validateDeck(cards: string[], subconscious?: string[]): DeckChec
     const c = CARD_BY_ID[id]
     if (!c) { problems.push(`Unknown card ${id}.`); continue }
     if (n > maxCopies) problems.push(`${c.name}: ${n} copies (max ${maxCopies}).`)
-    if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities and Words can be played for now.`)
+    if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities, Words and Relics can be played.`)
   }
 
   const curve = chapterCurve(cards)

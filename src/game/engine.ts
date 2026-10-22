@@ -14,7 +14,9 @@
 // - bonusDetails / traitDetails say where a value comes from; UNDELETABLE is the "can't be deleted" trait.
 
 import { CARD_BY_ID, cardName, extraDeckFor, type Card } from './cards'
-import { activate, afterFight, offerChangeOfValues, computeField, destroy, enter, forgotten, resolveChoice, storedTraits, type FieldEntity } from './effects'
+import {
+  activate, afterFight, offerChangeOfValues, computeField, activationBlocked, continueBlocked, destroy, echo, endOfTurn, enter, equipped, forgotten, isFightAbility, resolveChoice, specialStart, storedTraits, whisper, type FieldEntity,
+} from './effects'
 
 export type PlayerIdx = 0 | 1
 export type FightMode = 'sure' | 'flip'
@@ -110,6 +112,11 @@ export interface Mods {
   bonus: number
   turnBonus: number
   traits: Trait[]
+  /** set 1: bonuses and extra flips for the current fight only (Whisper Words, Terra Harmonia); cleared when it ends */
+  fightBonus?: number
+  fightFlips?: number
+  /** Storm Dragon Roar: draw 1 if it wins the current fight */
+  fightDraw?: boolean
 }
 
 export interface Story {
@@ -122,6 +129,12 @@ export interface Story {
   attackedTurn: number
   /** V2.2: read Chapters, face down under the Story */
   lost?: CardInst[]
+  /** rulebook §6b: the Relic tucked under this Story (1 per Story); it powers whichever Entity is on top */
+  relic?: CardInst
+  /** turn the Relic was equipped */
+  relicTurn?: number
+  /** attacks made on attackedTurn (dual-striker attacks twice) */
+  attacks?: number
 }
 
 export interface PlayerState {
@@ -147,7 +160,12 @@ export interface PlayerState {
   chants: CardInst[]
   /** last turn this player added a Word to their Chant (one per turn) */
   chantedTurn: number
+  /** the Reverie (discard pile): forgotten cards drift here */
   discard: CardInst[]
+  /** Harmony of Healing: this player's Values can't be revealed through this global turn */
+  shieldUntil?: number
+  /** last turn this player imagined a Chapter 2+ Entity (Luna Harmonia can join then) */
+  bigTurn?: number
 }
 
 export interface FightSide {
@@ -171,6 +189,8 @@ export interface PendingFight {
   attacker: { player: PlayerIdx; storyId: string }
   defender: { player: PlayerIdx; storyId: string }
   modes: [FightMode | null, FightMode | null]
+  /** set 1: each player can whisper once per fight */
+  whispered?: [boolean, boolean]
 }
 
 export type Phase = 'main' | 'fight'
@@ -183,8 +203,8 @@ export interface PendingChoice {
   /** shown to the player, e.g. "Choose exactly 3 Entities: they get brave until end of turn" */
   prompt: string
   /** where the options are, so the UI knows how to show them */
-  zone: 'field' | 'memories' | 'thoughts' | 'essence'
-  /** selectable card uids (for 'field': uids of imagined Entities) */
+  zone: 'field' | 'memories' | 'thoughts' | 'essence' | 'discard' | 'option'
+  /** selectable card uids (for 'field': uids of imagined Entities; for 'option': keys, labelled by data['label.<key>']) */
   options: string[]
   min: number
   max: number
@@ -215,6 +235,8 @@ export interface GameState {
   players: [PlayerState, PlayerState]
   mods: Record<string, Mods>
   usesSpent: Record<string, number>
+  /** last turn each once-per-turn ability was used, by uid */
+  usedTurn?: Record<string, number>
   pendingFight: PendingFight | null
   /** queue of decisions effects are waiting for; choices[0] is the current one */
   choices: PendingChoice[]
@@ -248,6 +270,10 @@ export type Action =
   | { t: 'disperse'; player: PlayerIdx }
   | { t: 'concede'; player: PlayerIdx }
   | { t: 'swapEssence'; essenceUid: string; handUid: string }
+  /** set 1: play a Whisper Word from Thoughts during a fight, before choosing your mode */
+  | { t: 'whisper'; player: PlayerIdx; uid: string }
+  /** rulebook §6b: equip a Relic from Thoughts (or the Reverie, if its text allows) to one of your Stories */
+  | { t: 'equip'; uid: string; storyId: string }
 
 // ---------- helpers ----------
 
@@ -308,13 +334,14 @@ export function powerBonus(s: GameState, uid: string): number {
 /** powerBonus split by where it comes from, for the UI. */
 export function bonusDetails(s: GameState, uid: string): { permanent: number; turn: number; continuous: number } {
   const m = modsOf(s, uid)
-  return { permanent: m.bonus, turn: m.turnBonus, continuous: fieldOf(s).get(uid)?.bonus ?? 0 }
+  return { permanent: m.bonus, turn: m.turnBonus + (m.fightBonus ?? 0), continuous: fieldOf(s).get(uid)?.bonus ?? 0 }
 }
 
-/** V2: what traits add in a fight: brave +1 when attacking, charming +1 when defending. */
+/** V2: what traits add in a fight: brave +1 when attacking, charming +1 when defending. Set 1: inoffensive −1 when attacking. */
 export function roleBonus(s: GameState, uid: string, role: 'attacker' | 'defender'): number {
   if (!RULES.braveCharming) return 0
-  return role === 'attacker' ? (hasTrait(s, uid, 'brave') ? 1 : 0) : hasTrait(s, uid, 'charming') ? 1 : 0
+  if (role === 'defender') return hasTrait(s, uid, 'charming') ? 1 : 0
+  return (hasTrait(s, uid, 'brave') ? 1 : 0) - (hasTrait(s, uid, 'inoffensive') ? 1 : 0)
 }
 
 /** The Entity's sure hit, before bonuses. */
@@ -330,8 +357,56 @@ export function canActivate(s: GameState, uid: string): string | null {
   const max = card(c).uses ?? 0
   if (!max) return 'No activated ability.'
   if ((s.usesSpent[uid] ?? 0) >= max) return 'No uses left this game.'
+  if (card(c).oncePerTurn && s.usedTurn?.[uid] === s.turn) return 'Once per turn.'
+  if (s.choices.length) return 'Finish the current step first.'
+  // "Before a fight" abilities (Terra Harmonia): in the fight window, when it's this player's move
+  if (isFightAbility(c.cardId)) {
+    if (!s.pendingFight || fightMover(s) !== owner) return 'Only during a fight, before you choose sure hit or flip.'
+    return activationBlocked(s, c, owner)
+  }
   if (s.active !== owner) return 'Only on your turn.'
-  if (s.choices.length || s.pendingFight) return 'Finish the current step first.'
+  if (s.pendingFight) return 'Finish the current step first.'
+  return activationBlocked(s, c, owner)
+}
+
+/** In a pending fight: the player who chooses next (attacker first, then defender), or null. */
+export function fightMover(s: GameState): PlayerIdx | null {
+  const f = s.pendingFight
+  if (!f) return null
+  if (!f.modes[f.attacker.player]) return f.attacker.player
+  return f.modes[f.defender.player] ? null : f.defender.player
+}
+
+/** The uid of a player's Entity in the pending fight, or null. */
+export function fighterOf(s: GameState, p: PlayerIdx): string | null {
+  const f = s.pendingFight
+  if (!f) return null
+  const side = f.attacker.player === p ? f.attacker : f.defender.player === p ? f.defender : null
+  const st = side && findStory(s, side.storyId)
+  return st ? top(st.story).uid : null
+}
+
+/** Why this Word can't be whispered now, or null if it can (rulebook §7: instant Words, during a fight). */
+export function canWhisper(s: GameState, p: PlayerIdx, c: CardInst): string | null {
+  if (!card(c).whisper) return 'Not a Whisper Word.'
+  if (!s.players[p].thoughts.some((x) => x.uid === c.uid)) return 'Not in your Thoughts.'
+  if (!s.pendingFight) return 'Whisper during a fight.'
+  if (s.choices.length) return 'Finish the current step first.'
+  if (fightMover(s) !== p) return 'Whisper before you choose sure hit or flip.'
+  if (s.pendingFight.whispered?.[p]) return 'One Whisper per fight.'
+  return null
+}
+
+/** Why this Relic can't be equipped to this Story now, or null (rulebook §6b). */
+export function canEquip(s: GameState, p: PlayerIdx, c: CardInst, story: Story): string | null {
+  const pl = s.players[p]
+  if (card(c).type !== 'Relic') return 'Not a Relic.'
+  if (s.active !== p || s.phase !== 'main' || s.pendingFight || s.choices.length) return 'Equip Relics in your Main step.'
+  const inHand = pl.thoughts.some((x) => x.uid === c.uid)
+  // Devil Drinker: "Playable from your Reverie"
+  const fromReverie = pl.discard.some((x) => x.uid === c.uid) && /Playable from your Reverie/i.test(card(c).text)
+  if (!inHand && !fromReverie) return 'Not in your Thoughts.'
+  if (!pl.stories.includes(story)) return 'Equip it to one of your Stories.'
   return null
 }
 
@@ -347,7 +422,7 @@ function topCard(s: GameState, uid: string): CardInst | null {
 }
 
 export function flipsFor(s: GameState, c: CardInst) {
-  let n = card(c).fate
+  let n = card(c).fate + (modsOf(s, c.uid).fightFlips ?? 0)
   if (hasTrait(s, c.uid, 'fated')) n += 1
   if (hasTrait(s, c.uid, 'starless')) n -= 1
   return Math.max(0, n)
@@ -363,7 +438,7 @@ export function findStory(s: GameState, storyId: string): { player: PlayerIdx; s
 
 export function canAttack(s: GameState, story: Story): string | null {
   if (s.phase !== 'fight') return 'Attacks happen in the Fight step.'
-  if (story.attackedTurn === s.turn) return 'Already attacked this turn.'
+  if (story.attackedTurn === s.turn && ((story.attacks ?? 1) >= 2 || !hasTrait(s, top(story).uid, 'dual-striker'))) return 'Already attacked this turn.'
   if (RULES.noAttackOnStartTurn && story.startedTurn === s.turn) return 'Its Story started this turn.'
   if (hasTrait(s, top(story).uid, 'pacifist')) return 'Pacifist Entities can’t attack.'
   return null
@@ -382,21 +457,30 @@ export function canChant(s: GameState, p: PlayerIdx, c: CardInst): string | null
   return null
 }
 
-/** V2: Entities the attacker may target: defenders first, if the opponent imagines any. */
+/** V2: Entities the attacker may target: defenders first, if the opponent imagines any. Set 1: stealth Entities can't be attacked. */
 export function attackTargets(s: GameState, foe: PlayerIdx): Story[] {
-  const all = s.players[foe].stories
+  const all = s.players[foe].stories.filter((st) => !hasTrait(s, top(st).uid, 'stealth'))
   if (!RULES.defenderGuards) return all
   const guards = all.filter((st) => hasTrait(s, top(st).uid, 'defender'))
   return guards.length ? guards : all
 }
 
+/** Can this Story's Entity attack the player directly? Only when the opponent imagines no Entity, or (set 1) when it is
+ *  sneaky and none of the opponent's Entities is a defender. */
+export function canAttackPlayer(s: GameState, story: Story): boolean {
+  const p = s.players[0].stories.includes(story) ? 0 : 1
+  const foe = s.players[other(p)].stories
+  if (!foe.length) return true
+  return hasTrait(s, top(story).uid, 'sneaky') && !foe.some((st) => hasTrait(s, top(st).uid, 'defender'))
+}
+
 export function canContinue(s: GameState, p: PlayerIdx, c: CardInst, story: Story): boolean {
-  return card(c).type === 'Entity' && story.movedTurn !== s.turn && card(top(story)).chapter + 1 === card(c).chapter && s.active === p
+  return card(c).type === 'Entity' && story.movedTurn !== s.turn && card(top(story)).chapter + 1 === card(c).chapter && s.active === p && !continueBlocked(s, p, c, story)
 }
 
 export function canStart(s: GameState, p: PlayerIdx, c: CardInst): boolean {
   const k = card(c)
-  return s.active === p && k.type === 'Entity' && s.players[p].stories.length < RULES.maxStories && (!RULES.storiesStartAtChapter1 || k.chapter === 1)
+  return s.active === p && k.type === 'Entity' && s.players[p].stories.length < RULES.maxStories && (!RULES.storiesStartAtChapter1 || k.chapter === 1 || specialStart(s, p, c))
 }
 
 export function log(s: GameState, msg: string) {
@@ -484,8 +568,12 @@ export function canSwapEssence(s: GameState, p: PlayerIdx, essenceUid: string, h
 }
 
 /** The player takes n hits: each reveals a face-down Value; a hit with none left reaches the Heart and ends the game. */
-export function loseEssence(s: GameState, p: PlayerIdx, n = 1, source?: string, how?: EssenceHit['how']) {
+/** cost: the player pays it themselves (Devil Drinker, timeless, Kurogane, Fallen's Shield), so shields don't stop it. */
+export function loseEssence(s: GameState, p: PlayerIdx, n = 1, source?: string, how?: EssenceHit['how'], cost = false) {
   const pl = s.players[p]
+  // set 1: Harmony of Healing and Fallen's Shield stop hits, Heart hits included. HOUSE RULE: not the costs you pay yourself.
+  const shield = cost ? null : (pl.shieldUntil ?? 0) >= s.turn ? 'Harmony of Healing' : pl.stories.some((st) => st.relic?.cardId === 'SOFA-057') ? 'Fallen’s Shield' : null
+  if (shield && n > 0) return log(s, `${shield}: ${pl.name}'s Values can't be revealed.`)
   const hit: EssenceHit = { seq: (s.lastHit?.seq ?? 0) + 1, player: p, revealed: [], heart: false }
   if (source) hit.source = source
   if (how) hit.how = how
@@ -541,6 +629,11 @@ export function removeTop(s: GameState, p: PlayerIdx, storyId: string, byFoe = f
   }
   if (story.cards.length > 0) return
   pl.stories = pl.stories.filter((st) => st.id !== storyId)
+  if (story.relic) {
+    pl.discard.push(story.relic)
+    log(s, `${card(story.relic).name} is forgotten with its Story.`)
+    story.relic = undefined
+  }
   const lost = story.lost ?? []
   if (!lost.length) return
   pl.discard.push(...lost)
@@ -557,7 +650,9 @@ function clone(s: GameState): GameState {
 
 // ---------- setup ----------
 
-export function newGame(opts: { seed: number; decks: [string[], string[]]; names: [string, string]; extras?: [string[], string[]] }): GameState {
+/** chooseValues (rulebook §8, Nero 2026-10-22): each player picks their 5 Values from their main deck before the deal.
+ *  Off (the simulator and tests): the top 5 cards of the shuffled deck become the Values. */
+export function newGame(opts: { seed: number; decks: [string[], string[]]; names: [string, string]; extras?: [string[], string[]]; chooseValues?: boolean }): GameState {
   const s: GameState = {
     rng: opts.seed | 0,
     nextUid: 1,
@@ -595,6 +690,7 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
       pl.extra = (opts.extras?.[p] ?? extraDeckFor(opts.decks[p])).map((cardId) => ({ uid: `c${s.nextUid++}`, cardId }))
       shuffle(s, pl.extra)
     }
+    if (opts.chooseValues && RULES.essenceCards) continue
     if (RULES.essenceCards) {
       pl.essenceStack = pl.memories.splice(0, RULES.startingEssence).map((c) => ({ c, up: false }))
       countEssence(pl)
@@ -602,9 +698,30 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     for (let i = 0; i < RULES.openingHand; i++) drawOne(s, p, true)
   }
   s.active = rand(s) < 0.5 ? 0 : 1
-  if (RULES.secondPlayerExtraCard) drawOne(s, other(s.active), true)
   log(s, `${s.players[s.active].name} goes first (and skips the first draw).`)
+  if (opts.chooseValues && RULES.essenceCards) {
+    for (const p of [s.active, other(s.active)]) {
+      s.choices.push({
+        player: p, sourceUid: '', zone: 'memories', options: s.players[p].memories.map((c) => c.uid), min: RULES.startingEssence, max: RULES.startingEssence,
+        effect: 'values', prompt: `Setup: choose ${RULES.startingEssence} cards from your deck as your Values (face down in your Essence)`,
+      })
+    }
+    return s
+  }
+  if (RULES.secondPlayerExtraCard) drawOne(s, other(s.active), true)
   return s
+}
+
+/** Setup with chooseValues: the picked cards become the player's face-down Values, then they shuffle and draw. */
+export function setValues(s: GameState, p: PlayerIdx, picks: string[]) {
+  const pl = s.players[p]
+  pl.essenceStack = pl.memories.filter((c) => picks.includes(c.uid)).map((c) => ({ c, up: false }))
+  pl.memories = pl.memories.filter((c) => !picks.includes(c.uid))
+  countEssence(pl)
+  shuffle(s, pl.memories)
+  const n = RULES.openingHand + (RULES.secondPlayerExtraCard && p !== s.active ? 1 : 0)
+  for (let i = 0; i < n; i++) drawOne(s, p, true)
+  log(s, `${pl.name} sets ${picks.length} Values face down and draws ${n}.`)
 }
 
 // ---------- reducer ----------
@@ -634,6 +751,7 @@ function settle(s: GameState) {
   }
   while (s.choices.length) {
     const ch = s.choices[0]
+    if (ch.zone === 'option') return
     const zone = ch.zone === 'field' ? null : ch.zone === 'essence' ? s.players[ch.player].essenceStack.filter((e) => e.up).map((e) => e.c) : s.players[ch.player][ch.zone]
     const options = ch.options.filter((uid) => (zone ? zone.some((c) => c.uid === uid) : ownerOf(s, uid) !== null))
     if (options.length) {
@@ -668,6 +786,7 @@ function step(s: GameState, a: Action): boolean {
       const below = top(story)
       story.cards.push(c)
       story.movedTurn = s.turn
+      if (card(c).chapter >= 2) pl.bigTurn = s.turn
       log(s, `${pl.name} continues ${cardName(card(below))}'s Story with ${cardName(card(c))} (Chapter ${card(c).chapter}).`)
       enter(s, c, me)
       return true
@@ -680,6 +799,8 @@ function step(s: GameState, a: Action): boolean {
       pl.chantedTurn = s.turn
       log(s, `${pl.name} adds ${card(c).name} (Echo ${card(c).echo ?? 1}) to their Chant.`)
       enter(s, c, me)
+      // set 1 HOUSE RULE: a Word "echoes" when it lands after another Word in the same Chant (its "Echo:" part happens)
+      echo(s, c, me, pl.chants.length >= 2)
       if (RULES.phraseClears && pl.chants.length >= RULES.maxChants && s.winner === null) {
         log(s, `${pl.name}'s Chant is complete: ${pl.chants.map((x) => card(x).name).join(', ')} are forgotten.`)
         pl.discard.push(...pl.chants)
@@ -698,9 +819,11 @@ function step(s: GameState, a: Action): boolean {
       if (!story || s.pendingFight || canAttack(s, story)) return false
       const foe = other(me)
       const atk = top(story)
+      const firstAttack = story.attackedTurn !== s.turn
       if (a.target === 'player') {
-        // HOUSE RULE (playtest-01): a direct attack is only possible when the opponent imagines no Entity.
-        if (s.players[foe].stories.length > 0) return false
+        // HOUSE RULE (playtest-01): a direct attack is only possible when the opponent imagines no Entity (or it is sneaky).
+        if (!canAttackPlayer(s, story)) return false
+        story.attacks = firstAttack ? 1 : (story.attacks ?? 1) + 1
         story.attackedTurn = s.turn
         log(s, `${card(atk).name} reaches ${s.players[foe].name}'s Essence! “I Dream your Value!”`)
         loseEssence(s, foe, 1, card(atk).name)
@@ -708,8 +831,9 @@ function step(s: GameState, a: Action): boolean {
       }
       const target = attackTargets(s, foe).find((st) => st.id === a.target)
       if (!target) return false
+      story.attacks = firstAttack ? 1 : (story.attacks ?? 1) + 1
       story.attackedTurn = s.turn
-      s.pendingFight = { attacker: { player: me, storyId: story.id }, defender: { player: foe, storyId: target.id }, modes: [null, null] }
+      s.pendingFight = { attacker: { player: me, storyId: story.id }, defender: { player: foe, storyId: target.id }, modes: [null, null], whispered: [false, false] }
       log(s, `${cardName(card(atk))} attacks ${cardName(card(top(target)))}.`)
       return true
     }
@@ -717,8 +841,11 @@ function step(s: GameState, a: Action): boolean {
       const f = s.pendingFight
       if (!f || f.modes[0] || f.modes[1]) return false
       const st = findStory(s, f.attacker.storyId)
-      if (st) st.story.attackedTurn = 0
-      s.pendingFight = null
+      if (st) {
+        st.story.attacks = (st.story.attacks ?? 1) - 1
+        if (st.story.attacks <= 0) st.story.attackedTurn = 0
+      }
+      endFight(s)
       log(s, 'Attack cancelled.')
       return true
     }
@@ -734,6 +861,8 @@ function step(s: GameState, a: Action): boolean {
       return true
     case 'endTurn': {
       if (s.pendingFight) return false
+      endOfTurn(s, me)
+      if (s.winner !== null) return true
       for (const m of Object.values(s.mods)) {
         m.turnBonus = 0
         m.traits = m.traits.filter((t) => !t.oneTurn && !(t.untilTurn !== undefined && t.untilTurn <= s.turn))
@@ -773,11 +902,41 @@ function step(s: GameState, a: Action): boolean {
     case 'activate': {
       if (canActivate(s, a.uid)) return false
       const c = findOnField(s, a.uid)!
+      const owner = ownerOf(s, a.uid)!
       const max = card(c).uses ?? 0
       const spent = s.usesSpent[a.uid] ?? 0
       s.usesSpent[a.uid] = spent + 1
+      if (card(c).oncePerTurn) s.usedTurn = { ...s.usedTurn, [a.uid]: s.turn }
       log(s, `${cardName(card(c))} uses its ability (${spent + 1}/${max}).`)
-      activate(s, c, me)
+      activate(s, c, owner)
+      return true
+    }
+    case 'whisper': {
+      const p = s.players[a.player]
+      const c = p.thoughts.find((x) => x.uid === a.uid)
+      if (!c || canWhisper(s, a.player, c)) return false
+      p.thoughts = p.thoughts.filter((x) => x !== c)
+      s.pendingFight!.whispered = a.player === 0 ? [true, !!s.pendingFight!.whispered?.[1]] : [!!s.pendingFight!.whispered?.[0], true]
+      log(s, `${p.name} whispers ${card(c).name}.`)
+      // its effect happens, then it's forgotten (rulebook §7)
+      p.discard.push(c)
+      whisper(s, c, a.player)
+      return true
+    }
+    case 'equip': {
+      const c = pl.thoughts.find((x) => x.uid === a.uid) ?? pl.discard.find((x) => x.uid === a.uid)
+      const story = pl.stories.find((st) => st.id === a.storyId)
+      if (!c || !story || canEquip(s, me, c, story)) return false
+      pl.thoughts = pl.thoughts.filter((x) => x !== c)
+      pl.discard = pl.discard.filter((x) => x !== c)
+      if (story.relic) {
+        pl.discard.push(story.relic)
+        log(s, `${card(story.relic).name} is forgotten: 1 Relic per Story.`)
+      }
+      story.relic = c
+      story.relicTurn = s.turn
+      log(s, `${pl.name} equips ${cardName(card(c))} to ${card(top(story)).name}'s Story.`)
+      equipped(s, c, me, story)
       return true
     }
     case 'choose': {
@@ -878,6 +1037,16 @@ function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode
   return { player, card: c, mode, base, bonus, flips, flipped, total: base + bonus }
 }
 
+/** Clears the pending fight and every fight-only bonus (set 1). Also used when a Whisper ends the fight. */
+export function endFight(s: GameState) {
+  s.pendingFight = null
+  for (const m of Object.values(s.mods)) {
+    delete m.fightBonus
+    delete m.fightFlips
+    delete m.fightDraw
+  }
+}
+
 function resolveFight(s: GameState) {
   const f = s.pendingFight!
   const atkStory = findStory(s, f.attacker.storyId)!.story
@@ -888,7 +1057,10 @@ function resolveFight(s: GameState) {
   const sureTie = RULES.sureWinsTies && attacker.total === defender.total && attacker.mode !== defender.mode
   const outcome = attacker.total > defender.total ? 'attacker' : defender.total > attacker.total ? 'defender'
     : sureTie ? (attacker.mode === 'sure' ? 'attacker' : 'defender') : 'tie'
-  s.pendingFight = null
+  // read before the fight-only mods are cleared and before the loser leaves
+  const drawsOnWin = (x: FightSide) => (hasTrait(s, x.card.uid, 'inspiring') ? 1 : 0) + (modsOf(s, x.card.uid).fightDraw ? 1 : 0)
+  const winnerDraws = outcome === 'attacker' ? drawsOnWin(attacker) : outcome === 'defender' ? drawsOnWin(defender) : 0
+  endFight(s)
   s.lastFight = { attacker, defender, outcome }
   const desc = (x: FightSide) => `${cardName(card(x.card))} ${x.mode === 'sure' ? 'takes its sure hit' : `flips ${x.flips}`} → ${x.total}`
   log(s, `Fight: ${desc(attacker)} vs ${desc(defender)}.`)
@@ -905,6 +1077,11 @@ function resolveFight(s: GameState) {
     loseEssence(s, loser.player, 1, card(loser === attacker ? defender.card : attacker.card).name)
   }
   if (RULES.changeOfValues && RULES.changeTrigger === 'defender' && (outcome === 'defender' || (RULES.changeOnTie && outcome === 'tie')) && s.winner === null && defender.flipped.some(hasHeartMark)) offerChangeOfValues(s, defender.player, defender.card)
+  if (winnerDraws && s.winner === null) {
+    const w = outcome === 'attacker' ? attacker : defender
+    log(s, `${card(w.card).name} wins: ${s.players[w.player].name} draws ${winnerDraws}.`)
+    for (let i = 0; i < winnerDraws && s.winner === null; i++) drawOne(s, w.player)
+  }
   afterFight(s, [
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
     { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { cardName } from '../game/cards'
 import {
-  card, findStory, flipsFor, hasHeartMark, RULES, powerBonus, roleBonus, sureOf, top,
+  canActivate, canWhisper, card, findStory, flipsFor, hasHeartMark, RULES, powerBonus, roleBonus, sureOf, top,
   type Action, type FightResult, type FightSide, type GameState, type PlayerIdx,
 } from '../game/engine'
 import { CardView, Stars } from './CardView'
@@ -34,8 +34,32 @@ export function FightChoice({ s, player, act }: { s: GameState; player: PlayerId
             Flip {flipsFor(s, mine)} card(s) and count ★{bonus ? ` ${signed(bonus)}` : ''}
           </button>
         </div>
+        <FightExtras s={s} player={player} act={act} />
         {player === f.attacker.player && <button className="btn ghost" onClick={() => act({ t: 'cancelAttack' })}>Cancel attack</button>}
       </div>
+    </div>
+  )
+}
+
+/** Whisper Words in Thoughts and "Before a fight" abilities (Terra Harmonia) the player can use now. */
+function FightExtras({ s, player, act }: { s: GameState; player: PlayerIdx; act: (a: Action) => void }) {
+  const words = s.players[player].thoughts.filter((c) => card(c).whisper)
+  const abilities = s.players[player].stories.map((st) => top(st)).filter((c) => !canActivate(s, c.uid))
+  if (!words.length && !abilities.length) return null
+  return (
+    <div className="whispers">
+      <div className="muted small">Before you choose:</div>
+      {words.map((c) => {
+        const why = canWhisper(s, player, c)
+        return (
+          <button key={c.uid} className="btn green" disabled={!!why} title={why ?? card(c).text} onClick={() => act({ t: 'whisper', player, uid: c.uid })}>
+            Whisper {card(c).name}{why ? ` · ${why}` : ''}
+          </button>
+        )
+      })}
+      {abilities.map((c) => (
+        <button key={c.uid} className="btn orange" title={card(c).text} onClick={() => act({ t: 'activate', uid: c.uid })}>◆ {card(c).name}</button>
+      ))}
     </div>
   )
 }

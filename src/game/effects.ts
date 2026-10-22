@@ -221,6 +221,26 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
       log(s, `${ch.data?.src}: ${pl.name} draws 1.`)
     }
   },
+  cov1: (s, ch, picks) => {
+    const pl = s.players[ch.player]
+    if (!picks.length) return log(s, `${pl.name} keeps their Values as they are.`)
+    ask(s, {
+      player: ch.player, sourceUid: ch.sourceUid, zone: 'thoughts', options: pl.thoughts.map((c) => c.uid), min: 1, max: 1, effect: 'cov2',
+      data: { ...ch.data, value: picks[0] }, prompt: 'Change of Values: choose a card from your Thoughts to put into your Essence face down.',
+    }, '')
+  },
+  cov2: (s, ch, picks) => {
+    const pl = s.players[ch.player]
+    const e = pl.essenceStack.find((x) => x.c.uid === ch.data?.value && x.up)
+    const h = pl.thoughts.find((c) => c.uid === picks[0])
+    if (!e || !h) return
+    pl.thoughts = [...pl.thoughts.filter((c) => c !== h), e.c]
+    log(s, `Change of Values: ${pl.name} takes back ${cardName(card(e.c))} and puts a new Value face down.`)
+    e.c = h
+    e.up = false
+    pl.essence++
+    pl.lost--
+  },
   hiroshi: (s, ch, picks) => {
     const pl = s.players[ch.player]
     const c = pl.thoughts.find((x) => x.uid === picks[0])
@@ -234,6 +254,18 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     traitOrBonus(s, c, 'fate-favored', 1)
     enter(s, c, ch.player)
   },
+}
+
+/** V2.4 Change of Values: pick a revealed Value to take back (or none), then the Thoughts card that replaces it face down. */
+export function offerChangeOfValues(s: GameState, p: PlayerIdx, by: CardInst) {
+  const pl = s.players[p]
+  const up = pl.essenceStack.filter((e) => e.up).map((e) => e.c.uid)
+  if (!up.length || !pl.thoughts.length) return
+  log(s, `${nm(by)}'s Memories touch back: ${pl.name} may change a Value.`)
+  ask(s, {
+    player: p, sourceUid: by.uid, zone: 'essence', options: up, min: 0, max: 1, effect: 'cov1', data: { src: nm(by) },
+    prompt: `Change of Values: choose a revealed Value to take into your Thoughts (or none).`,
+  }, '')
 }
 
 export function resolveChoice(s: GameState, ch: PendingChoice, picks: string[]) {

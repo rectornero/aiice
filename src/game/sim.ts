@@ -24,6 +24,8 @@ export interface GameRecord {
   laidBare: number
   /** Essence hits from Memories that touch (V2.3) */
   touches: number
+  /** Change of Values uses (V2.4) */
+  changes: number
   /** attacker's mode choices: [flip, sure] */
   attackModes: [number, number]
   /** times each card entered the field (started or continued a Story) */
@@ -50,6 +52,7 @@ export function playGame(opts: {
   let actions = 0
   let laidBare = 0
   let touches = 0
+  let changes = 0
   const modes = [0, 0]
   while (s.winner === null && s.turn <= maxTurns) {
     const p = whoMustAct(s)
@@ -62,6 +65,7 @@ export function playGame(opts: {
     opts.onAction?.(s, a, next)
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'bare') laidBare++
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'touch') touches++
+    if (a.t === 'choose' && s.choices[0]?.effect === 'cov2' && a.picks.length) changes++
     if (a.t === 'chooseMode' && s.pendingFight?.attacker.player === a.player) modes[a.mode === 'flip' ? 0 : 1]++
     const now = new Set<string>()
     for (const pl of next.players) for (const st of pl.stories) for (const c of st.cards) {
@@ -82,6 +86,7 @@ export function playGame(opts: {
     heart: w !== null && !!s.lastHit?.heart,
     laidBare,
     touches,
+    changes,
     attackModes: [modes[0], modes[1]],
     played,
   }
@@ -104,6 +109,7 @@ export interface SimStats {
   /** Stories laid bare per game */
   laidBarePerGame: number
   touchesPerGame: number
+  changesPerGame: number
   /** share of attacks where the attacker flipped instead of taking the sure hit */
   attackFlipRate: number
   /** times each card entered the field, over all games */
@@ -112,13 +118,14 @@ export interface SimStats {
 
 /** Plays `games` bot-vs-bot games. Seats alternate every game so both decks sit in both seats. */
 export function simulate(opts: { games: number; seed: number; decks: [string[], string[]]; levels?: [BotLevel, BotLevel]; maxTurns?: number }): SimStats {
-  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, attackFlipRate: 0, played: {} }
+  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, attackFlipRate: 0, played: {} }
   let turns = 0
   let essence = 0
   let firstWins = 0
   let hearts = 0
   let bare = 0
   let touch = 0
+  let change = 0
   const am = [0, 0]
   for (let g = 0; g < opts.games; g++) {
     const seed = (Math.imul(opts.seed ^ 0x5bd1e995, 31) + Math.imul(g + 1, 0x9e3779b1)) | 0
@@ -126,6 +133,7 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
     turns += r.turns
     bare += r.laidBare
     touch += r.touches
+    change += r.changes
     am[0] += r.attackModes[0]
     am[1] += r.attackModes[1]
     if (r.heart) hearts++
@@ -146,6 +154,7 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   st.heartRate = decided ? hearts / decided : 0
   st.laidBarePerGame = opts.games ? bare / opts.games : 0
   st.touchesPerGame = opts.games ? touch / opts.games : 0
+  st.changesPerGame = opts.games ? change / opts.games : 0
   st.attackFlipRate = am[0] + am[1] ? am[0] / (am[0] + am[1]) : 0
   return st
 }
@@ -162,7 +171,7 @@ export function formatReport(st: SimStats, deckNames: [string, string], levels: 
     `  seat 0 / seat 1 wins: ${st.winsBySeat[0]} / ${st.winsBySeat[1]}`,
     `  first player wins ${pct(Math.round(st.firstPlayerWinRate * decided), decided)} of decided games`,
     `  average length ${st.avgTurns.toFixed(1)} turns, winner keeps ${st.avgWinnerEssence.toFixed(2)} Values on average`,
-    `  Heart reached in ${(100 * st.heartRate).toFixed(1)}% of decided games, ${st.laidBarePerGame.toFixed(2)} Stories laid bare and ${st.touchesPerGame.toFixed(2)} touches per game, attackers flip ${(100 * st.attackFlipRate).toFixed(0)}%`,
+    `  Heart reached in ${(100 * st.heartRate).toFixed(1)}% of decided games, ${st.laidBarePerGame.toFixed(2)} Stories laid bare and ${st.touchesPerGame.toFixed(2)} touches and ${st.changesPerGame.toFixed(2)} Changes of Values per game, attackers flip ${(100 * st.attackFlipRate).toFixed(0)}%`,
     `  cards played (entered the field), per game:`,
     ...Object.entries(st.played)
       .sort((a, b) => b[1] - a[1])

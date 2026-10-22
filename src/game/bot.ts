@@ -173,13 +173,16 @@ function smartPicks(s: GameState, ch: PendingChoice): string[] {
     const good = ranked.filter((uid) => score(uid) > 0)
     return ranked.slice(0, Math.max(min, Math.min(max, good.length)))
   }
-  const cards = [...s.players[p].memories, ...s.players[p].thoughts, ...s.players[p].discard]
+  const cards = [...s.players[p].memories, ...s.players[p].thoughts, ...s.players[p].discard, ...s.players[p].essenceStack.map((e) => e.c)]
   // "put any on the bottom" (Read the Stars): keep stars on top for flips, send starless cards away
   if (ch.effect === 'bottom') return ch.options.filter((uid) => { const c = cards.find((x) => x.uid === uid); return !!c && cardOf(c).stars === 0 })
   const val = (uid: string) => {
     const c = cards.find((x) => x.uid === uid)
     return c ? handValue(s, p, c) : 0
   }
+  // Change of Values: always take the best revealed Value back, then bury the weakest card in hand
+  if (ch.effect === 'cov1') return [...ch.options].sort((a, b) => val(b) - val(a)).slice(0, 1)
+  if (ch.effect === 'cov2') return [...ch.options].sort((a, b) => val(a) - val(b)).slice(0, 1)
   const ranked = [...ch.options].sort((a, b) => (harmful ? val(a) - val(b) : val(b) - val(a)))
   return ranked.slice(0, harmful ? min : max)
 }
@@ -374,9 +377,12 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
         const vD = storyValue(s, p, dSt)
         const am = attackEV(s, { p: f.attacker.player, st: aSt }, { p, st: dSt }).mode
         const da = sideDist(s, f.attacker.player, topOf(aSt), am, 'attacker')
+        // V2.4: winning a flip with a Heart card can heal a revealed Value
+        const pl = s.players[p]
+        const heal = RULES.changeOfValues && pl.lost > 0 && pl.thoughts.length ? touchChance(s, p, flipsFor(s, topOf(dSt))) * essenceWorth(s, p) : 0
         const score = (md: FightMode) => {
           const o = odds(da, sideDist(s, p, topOf(dSt), md, 'defender'))
-          return o.lose * vA - o.win * vD
+          return o.lose * vA - o.win * (vD + (md === 'flip' ? heal : 0))
         }
         yield { t: 'chooseMode', player: p, mode: score('flip') > score('sure') ? 'flip' : 'sure' }
       }

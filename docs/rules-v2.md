@@ -77,3 +77,18 @@ Sim, 1000 games each, on top of v2.2. The ♥ goes on the same spread of cards i
 | 7 | 45.1% | 52.5% | 2.4% | 53.5% | 14.9 | 3.62 | 0.98 | 2.60 | 45% |
 
 Every decided game ends on the Heart.
+
+## v2.4: Change of Values (Nero, 2026-10-22)
+
+A defender that flips, wins the fight, and shows a ♥ among its flips may take one revealed Value into Thoughts and put a card from Thoughts into the Essence face down. The bot always does it when it can, and it counts the chance when it picks flip or sure hit as defender.
+
+Sim, 1000 games each, 5 ♥ per deck:
+
+| rules | Music | Fate | draws | 1st player | turns | winner's face-down Values | touches / game | Changes / game | attackers flip |
+|---|---|---|---|---|---|---|---|---|---|
+| v2.3 | 43.8% | 53.3% | 2.9% | 53.9% | 15.7 | 3.74 | 2.01 | 0 | 39% |
+| + Change of Values | 45.3% | 51.6% | 3.1% | 54.8% | 15.7 | 3.81 | 1.95 | 0.01 | 39% |
+| + Change of Values + 2nd player starts with 6 | 45.4% | 52.0% | 2.6% | 49.1% | 15.2 | 3.71 | 1.94 | 0.01 | 36% |
+| v2.3 + 2nd player starts with 6 (no Change) | 44.4% | 52.8% | 2.8% | 49.0% | 15.7 | 3.61 | 1.94 | 0 | 36% |
+
+Change of Values almost never happens (about once per 70 games). Defenders flip only about 1 time in 5, and it also needs a win, a ♥, a revealed Value and a card in hand. The first-player edge is fixed by the 6th card, not by Hearts.

@@ -14,7 +14,7 @@
 // - bonusDetails / traitDetails say where a value comes from; UNDELETABLE is the "can't be deleted" trait.
 
 import { CARD_BY_ID, cardName, type Card } from './cards'
-import { activate, afterFight, computeField, destroy, enter, forgotten, resolveChoice, storedTraits, type FieldEntity } from './effects'
+import { activate, afterFight, offerChangeOfValues, computeField, destroy, enter, forgotten, resolveChoice, storedTraits, type FieldEntity } from './effects'
 
 export type PlayerIdx = 0 | 1
 export type FightMode = 'sure' | 'flip'
@@ -53,6 +53,9 @@ export const RULES = {
   /** V2.3 "Memories that touch" (Nero, 2026-10-22, rulebook §9): an attacker that wins a fight in which it flipped
    *  at least one Heart-marked card also reaches the defender's Essence (reveal 1 Value), once per fight. */
   memoriesTouch: true,
+  /** V2.4 "Change of Values" (Nero, 2026-10-22): a defender that wins a fight in which it flipped a Heart-marked card
+   *  may swap one of its revealed Values with a card from its Thoughts; the new card goes into the Essence face down. */
+  changeOfValues: true,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -157,7 +160,7 @@ export interface PendingChoice {
   /** shown to the player, e.g. "Choose exactly 3 Entities: they get brave until end of turn" */
   prompt: string
   /** where the options are, so the UI knows how to show them */
-  zone: 'field' | 'memories' | 'thoughts'
+  zone: 'field' | 'memories' | 'thoughts' | 'essence'
   /** selectable card uids (for 'field': uids of imagined Entities) */
   options: string[]
   min: number
@@ -566,7 +569,7 @@ function settle(s: GameState) {
   }
   while (s.choices.length) {
     const ch = s.choices[0]
-    const zone = ch.zone === 'field' ? null : s.players[ch.player][ch.zone]
+    const zone = ch.zone === 'field' ? null : ch.zone === 'essence' ? s.players[ch.player].essenceStack.filter((e) => e.up).map((e) => e.c) : s.players[ch.player][ch.zone]
     const options = ch.options.filter((uid) => (zone ? zone.some((c) => c.uid === uid) : ownerOf(s, uid) !== null))
     if (options.length) {
       s.choices[0] = { ...ch, options, min: Math.min(ch.min, options.length), max: Math.min(ch.max, options.length) }
@@ -834,6 +837,7 @@ function resolveFight(s: GameState) {
     log(s, `${s.players[loser.player].name} lost the fight: they take a hit.`)
     loseEssence(s, loser.player, 1, card(loser === attacker ? defender.card : attacker.card).name)
   }
+  if (RULES.changeOfValues && outcome === 'defender' && s.winner === null && defender.flipped.some(hasHeartMark)) offerChangeOfValues(s, defender.player, defender.card)
   afterFight(s, [
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
     { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },

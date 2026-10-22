@@ -127,6 +127,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
           <li><b>Essence</b>: your stack of 5 face-down <b>Values</b> (cards from your Memories), with your <b>Heart</b> behind them. If the opponent imagines no Entity, attack them directly: “Camelia reaches the Essence!”, then “I Dream your Value!”, and they reveal 1 Value. Once per turn you can swap a revealed Value with a card in your Thoughts. A hit when no Value is face down reaches the Heart: “I Dream the Heart of your Music!”, and that player loses.</li>
           <li><b>Read Chapters</b> (v2.2): a read Entity falls back a Chapter and stays face down under its Story (✕); a lone Chapter 1 is forgotten. Read the last face-up Entity of a Story with read Chapters and the Story is <b>laid bare</b>: it empties and reaches its owner's Essence (reveal 1 Value).</li>
           <li><b>Memories that touch</b> (v2.3): some cards carry a ♥ next to their Fate stars. If you attack, flip, and win with at least one ♥ card among your flips, you also reach the opponent's Essence (reveal 1 Value), once per fight. A sure hit flips nothing, so it can't touch.</li>
+          <li><b>Change of Values</b> (v2.4): if you defend, flip, and win with a ♥ among your flips, you may take one revealed Value into your Thoughts and put a card from your Thoughts into your Essence face down.</li>
           <li>Card art is a placeholder from game-icons.net (CC BY 3.0, credits in the repo). Fate, sure hit and ★ values are still provisional.</li>
         </ul>
       </details>

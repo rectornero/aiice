@@ -203,3 +203,22 @@ describe('V2.3: Memories that touch', () => {
     expect(s.players[1].essenceStack.filter((e) => e.up)).toHaveLength(0)
   })
 })
+
+describe('V2.4: Change of Values', () => {
+  it('a defender that flips a Heart card and wins may put a hand card face down in place of a revealed Value', () => {
+    let s = table({ field: [['SOFA-002'], ['SOFA-001']], hand: [[], ['SOFA-004']], memories: [[], ['SOFA-028', 'SOFA-028', 'SOFA-028']] })
+    s.players[1].essenceStack[0].up = true
+    s.players[1].essence = 4
+    s.players[1].lost = 1
+    s = fight(s, 'SOFA-002', 'SOFA-001', ['sure', 'flip'])
+    expect(s.lastFight?.outcome).toBe('defender')
+    expect(s.choices[0]?.effect).toBe('cov1')
+    const back = s.players[1].essenceStack[0].c.uid
+    s = reduce(s, { t: 'choose', player: 1, picks: [back] })
+    s = reduce(s, { t: 'choose', player: 1, picks: [inHand(s, 'SOFA-004', 1).uid] })
+    expect(s.players[1].essenceStack.every((e) => !e.up)).toBe(true)
+    expect(s.players[1].essenceStack[0].c.cardId).toBe('SOFA-004')
+    expect(s.players[1].thoughts.some((c) => c.uid === back)).toBe(true)
+    expect(s.players[1].essence).toBe(5)
+  })
+})

@@ -23,7 +23,7 @@ export function EssenceCall({ s, hit, onDone }: { s: GameState; hit: EssenceHit;
   const name = s.players[hit.player].name
   const domain = mainDomain(s, hit.player)
   const lines = [
-    hit.source ? (hit.how === 'touch' ? `${hit.source}'s Memories touch ${name}'s Essence!` : `${hit.source} reaches ${name}'s Essence!`) : `${name}'s Essence is struck!`,
+    hit.source ? `${hit.source} reaches the Essence!` : `${name}'s Essence is struck!`,
     hit.heart ? `“I Dream the Heart of your ${domain}!”` : '“I Dream your Value!”',
   ]
   const last = lines.length // final step: the revealed Values

@@ -68,6 +68,11 @@ export const RULES = {
   /** V2.7 running out (Nero, rulebook §8b): the 10-card Subconscious (extra deck) becomes Memories when they run out; after that each
    *  draw takes a face-down Value into Thoughts; with nothing left to draw you share your Heart and lose. */
   runningOut: true,
+  /** V2.8 (Nero, 2026-10-22): a sure hit wins a tie against a flip (sure vs sure and flip vs flip ties still do nothing). */
+  sureWinsTies: true,
+  /** reference candidates (off): a defender's sure hit blocks the attacker's touch; +N to every sure hit. */
+  sureBlocksTouch: false,
+  sureBonus: 0,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -314,7 +319,7 @@ export function roleBonus(s: GameState, uid: string, role: 'attacker' | 'defende
 
 /** The Entity's sure hit, before bonuses. */
 export function sureOf(_s: GameState, c: CardInst): number {
-  return card(c).sure
+  return card(c).sure + RULES.sureBonus
 }
 
 /** Why the Entity's activated ability can't be used now, or null if it can. */
@@ -409,13 +414,18 @@ export function refillMemories(s: GameState, p: PlayerIdx) {
 }
 
 /** Flips n cards: from the top of Memories (they go to the bottom). Rulebook §9: if Memories hold fewer than n,
- *  the rest come from the top of the Subconscious and go back on top of it in the same order. */
+ *  the rest come from the top of the Subconscious and go to its bottom. */
 export function flipCards(s: GameState, p: PlayerIdx, n: number): CardInst[] {
   const pl = s.players[p]
   if (RULES.runningOut) refillMemories(s, p)
   const flipped = pl.memories.splice(0, n)
   pl.memories.push(...flipped)
-  if (RULES.runningOut && flipped.length < n && pl.extra?.length) flipped.push(...pl.extra.slice(0, n - flipped.length))
+  if (RULES.runningOut && flipped.length < n && pl.extra?.length) {
+    // like any flip, the cards go to the bottom of the pile they came from (Nero)
+    const more = pl.extra.splice(0, n - flipped.length)
+    pl.extra.push(...more)
+    flipped.push(...more)
+  }
   return flipped
 }
 
@@ -875,7 +885,9 @@ function resolveFight(s: GameState) {
   const attacker = fightSide(s, f.attacker.player, top(atkStory), f.modes[f.attacker.player]!, 'attacker')
   const defender = fightSide(s, f.defender.player, top(defStory), f.modes[f.defender.player]!, 'defender')
   // HOUSE RULE (rulebook [open]): on a tie nothing happens.
-  const outcome = attacker.total > defender.total ? 'attacker' : defender.total > attacker.total ? 'defender' : 'tie'
+  const sureTie = RULES.sureWinsTies && attacker.total === defender.total && attacker.mode !== defender.mode
+  const outcome = attacker.total > defender.total ? 'attacker' : defender.total > attacker.total ? 'defender'
+    : sureTie ? (attacker.mode === 'sure' ? 'attacker' : 'defender') : 'tie'
   s.pendingFight = null
   s.lastFight = { attacker, defender, outcome }
   const desc = (x: FightSide) => `${cardName(card(x.card))} ${x.mode === 'sure' ? 'takes its sure hit' : `flips ${x.flips}`} → ${x.total}`
@@ -883,7 +895,7 @@ function resolveFight(s: GameState) {
   const loser = outcome === 'attacker' ? defender : outcome === 'defender' ? attacker : null
   const deleted = loser ? destroy(s, loser.card.uid) : false
   if (!loser) log(s, 'Tie: both Entities survive.')
-  if (RULES.memoriesTouch && outcome === 'attacker' && s.winner === null && attacker.flipped.some(hasHeartMark)) {
+  if (RULES.memoriesTouch && outcome === 'attacker' && s.winner === null && attacker.flipped.some(hasHeartMark) && !(RULES.sureBlocksTouch && defender.mode === 'sure')) {
     log(s, `${cardName(card(attacker.card))}'s Memories touch ${s.players[defender.player].name}: “I Dream your Value!”`)
     loseEssence(s, defender.player, 1, cardName(card(attacker.card)), 'touch')
     if (RULES.changeOfValues && RULES.changeForAttacker && s.winner === null) offerChangeOfValues(s, attacker.player, attacker.card)

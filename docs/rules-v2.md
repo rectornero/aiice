@@ -165,3 +165,16 @@ Is 15 Memories enough? 1000 games each (the 25-card main deck adds 5 more non-â™
 
 If Memories hold fewer cards than you must flip, flip the rest from the top of the Subconscious, then put them back on top of it in the same order. Once the Subconscious has become Memories, you flip what you have.
 Sim, 1000 games: Music 43.3%, Fate 56.7%, first player 45.0% (was 47.4%), 14.0 turns. Attackers flip 43% (was 37%), defenders 35% (was 30%). Someone reaches the Subconscious in 50% of games, on turn 14.5 on average, and 1.1% of games end by sharing the Heart.
+
+Correction (Nero): cards flipped from the Subconscious go to its bottom, like any flip.
+
+## v2.8: a sure hit wins ties against a flip (Nero, 2026-10-22). App default
+
+Sure vs sure and flip vs flip ties still do nothing. B and C are for reference only. 1000 games each:
+
+| rules | Music | Fate | 1st player | turns | winner's face-down Values | touches / game | attackers flip | defenders flip |
+|---|---|---|---|---|---|---|---|---|
+| v2.7 (ties do nothing) | 44.4% | 55.6% | 45.3% | 14.1 | 3.63 | 2.04 | 43% | 35% |
+| A: sure wins ties (default) | 46.9% | 53.1% | 45.4% | 13.9 | 3.54 | 1.74 | 33% | 23% |
+| B: a defender's sure hit blocks the touch | 42.0% | 58.0% | 45.3% | 15.8 | 3.85 | 0.42 | 23% | 32% |
+| C: +1 to every sure hit | 53.7% | 46.3% | 45.2% | 15.9 | 3.77 | 1.10 | 19% | 22% |

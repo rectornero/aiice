@@ -272,13 +272,27 @@ describe('V2.7: running out', () => {
 })
 
 describe('V2.7: thin Memories flip from the Subconscious', () => {
-  it('flips the rest from the top of the Subconscious and leaves it in order', () => {
+  it('flips the rest from the top of the Subconscious and puts them at its bottom', () => {
     const s = table({ memories: [['SOFA-001'], []] })
     s.players[0].extra = [inst('SOFA-028'), inst('SOFA-003'), inst('SOFA-004')]
     const order = s.players[0].extra.map((c) => c.uid)
     const f = flipCards(s, 0, 3)
     expect(f.map((c) => c.cardId)).toEqual(['SOFA-001', 'SOFA-028', 'SOFA-003'])
-    expect(s.players[0].extra.map((c) => c.uid)).toEqual(order)
+    expect(s.players[0].extra.map((c) => c.uid)).toEqual([order[2], order[0], order[1]])
     expect(s.players[0].memories.map((c) => c.cardId)).toEqual(['SOFA-001'])
+  })
+})
+
+describe('V2.8: a sure hit wins ties against a flip', () => {
+  it('sure vs flip tie goes to the sure hit; sure vs sure is still a tie', () => {
+    // Aqua Beat sure 2 vs Sparkle Keys flipping one 2-star card = 2
+    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [[], ['SOFA-028', 'SOFA-028']] })
+    s = fight(s, 'SOFA-001', 'SOFA-002', ['sure', 'flip'])
+    expect(s.lastFight?.attacker.total).toBe(s.lastFight?.defender.total)
+    expect(s.lastFight?.outcome).toBe('attacker')
+    let t = table({ field: [['SOFA-001'], ['SOFA-M01']] })
+    t = fight(t, 'SOFA-001', 'SOFA-M01', ['sure', 'sure'])
+    expect(t.lastFight?.attacker.total).toBe(t.lastFight?.defender.total)
+    expect(t.lastFight?.outcome).toBe('tie')
   })
 })

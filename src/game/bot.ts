@@ -74,14 +74,15 @@ function sideDist(s: GameState, p: PlayerIdx, c: CardInst, mode: FightMode, role
   return mode === 'sure' ? [[sureOf(s, c) + bonus, 1]] : flipDist(s, p, flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0), bonus)
 }
 
-/** Probabilities that the attacker wins / loses (a tie changes nothing). */
-function odds(a: Dist, d: Dist) {
+/** Probabilities that the attacker wins / loses. A tie changes nothing, except that a sure hit wins it against a flip (V2.8). */
+function odds(a: Dist, d: Dist, ma?: FightMode, md?: FightMode) {
   let win = 0
   let lose = 0
+  const tieTo = RULES.sureWinsTies && ma && md && ma !== md ? (ma === 'sure' ? 'win' : 'lose') : null
   for (const [x, px] of a)
     for (const [y, py] of d) {
-      if (x > y) win += px * py
-      else if (y > x) lose += px * py
+      if (x > y || (x === y && tieTo === 'win')) win += px * py
+      else if (y > x || (x === y && tieTo === 'lose')) lose += px * py
     }
   return { win, lose }
 }
@@ -130,8 +131,8 @@ function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: Play
     const da = sideDist(s, atk.p, topOf(atk.st), ma, 'attacker')
     let worst = Infinity
     for (const md of MODES) {
-      const o = odds(da, sideDist(s, def.p, topOf(def.st), md, 'defender'))
-      worst = Math.min(worst, o.win * (vD + (ma === 'flip' ? touch : 0)) - o.lose * vA)
+      const o = odds(da, sideDist(s, def.p, topOf(def.st), md, 'defender'), ma, md)
+      worst = Math.min(worst, o.win * (vD + (ma === 'flip' && !(RULES.sureBlocksTouch && md === 'sure') ? touch : 0)) - o.lose * vA)
     }
     if (worst > best.ev) best = { mode: ma, ev: worst }
   }
@@ -263,7 +264,7 @@ function winChance(s: GameState, p: PlayerIdx, storyId: string, targetId: string
   const a = s.players[p].stories.find((st) => st.id === storyId)
   const d = s.players[foeOf(p)].stories.find((st) => st.id === targetId)
   if (!a || !d) return 0
-  return Math.max(...MODES.map((ma) => Math.min(...MODES.map((md) => odds(sideDist(s, p, topOf(a), ma, 'attacker'), sideDist(s, foeOf(p), topOf(d), md, 'defender')).win))))
+  return Math.max(...MODES.map((ma) => Math.min(...MODES.map((md) => odds(sideDist(s, p, topOf(a), ma, 'attacker'), sideDist(s, foeOf(p), topOf(d), md, 'defender'), ma, md).win))))
 }
 
 function easyPolicy(s: GameState, p: PlayerIdx): Action | null {
@@ -389,7 +390,7 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
         const pl = s.players[p]
         const heal = RULES.changeOfValues && pl.lost > 0 && pl.thoughts.length ? touchChance(s, p, flipsFor(s, topOf(dSt)) + RULES.defenseExtraFlips) * essenceWorth(s, p) * Math.min(RULES.changeMax, pl.lost, pl.thoughts.length) : 0
         const score = (md: FightMode) => {
-          const o = odds(da, sideDist(s, p, topOf(dSt), md, 'defender'))
+          const o = odds(da, sideDist(s, p, topOf(dSt), md, 'defender'), am, md)
           return o.lose * vA - o.win * (vD + (md === 'flip' ? heal : 0))
         }
         yield { t: 'chooseMode', player: p, mode: score('flip') > score('sure') ? 'flip' : 'sure' }

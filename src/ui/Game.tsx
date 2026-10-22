@@ -8,6 +8,7 @@ import {
 import { CardDetails, CardText, CardView } from './CardView'
 import { ChoiceBar, ChoiceModal, picksValid } from './ChoicePrompt'
 import { FightChoice, FightReveal } from './FightView'
+import { EssenceCall } from './EssenceCall'
 import { useMatch, type MatchMode, type NetStatus } from './useMatch'
 
 const TRAITS = ['brave', 'resonant', 'fate-favored', 'ill-fated', 'pacifist', 'defender', 'death-defiant', 'charming', 'inoffensive', 'ethereal']
@@ -55,6 +56,10 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
   }
 
   const revealView = reveal && <FightReveal key={JSON.stringify(reveal)} s={s} r={reveal} onClose={dismissReveal} />
+  // cinematic call for each new hit on an Essence, after any fight reveal
+  const [shownHit, setShownHit] = useState(s.lastHit?.seq ?? 0)
+  const hit = s.lastHit && s.lastHit.seq > shownHit && !reveal ? s.lastHit : null
+  const callView = hit && <EssenceCall key={hit.seq} s={s} hit={hit} onDone={() => setShownHit(hit.seq)} />
 
   if (curtain) {
     const sub = ch ? `${s.players[ch.player].name} must choose` : s.pendingFight ? 'Fight! The defender chooses' : `Turn ${s.turn}`
@@ -68,6 +73,7 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
           </div>
         </div>
         {revealView}
+        {callView}
       </>
     )
   }
@@ -183,7 +189,8 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
         <ChoiceModal s={s} ch={myChoice} picks={picks} toggle={toggle} onConfirm={confirm} onHide={() => setChoiceHidden(true)} />
       )}
       {revealView}
-      {s.winner !== null && !reveal && (
+      {callView}
+      {s.winner !== null && !reveal && !hit && (
         <div className="overlay">
           <div className="dialog center">
             <h2>{s.players[s.winner].name} wins!</h2>
@@ -275,9 +282,10 @@ function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile, clickChant }:
     <section className={`area ${mine ? 'mine' : 'theirs'} ${s.active === p ? 'active' : ''}`}>
       <div className="area-head">
         <div className="pname">{pl.name}{s.active === p && ' ●'}</div>
-        <button type="button" className="essence" title={`Essence: ${pl.essence} Values face down, ${pl.lost} revealed, then the Heart. Tap to see them.`} onClick={() => openPile('essence')}>
-          {Array.from({ length: pl.essence }, (_, i) => <span key={i} className="ess on">◆</span>)}
-          {Array.from({ length: pl.lost }, (_, i) => <span key={`l${i}`} className="ess off" title="revealed Value">◇</span>)}
+        <button type="button" className="essence" title={`Essence: ${pl.lost} of ${pl.lost + pl.essence} Values revealed, then the Heart. Tap to see them.`} onClick={() => openPile('essence')}>
+          {Array.from({ length: pl.lost }, (_, i) => <span key={`l${i}`} className="ess sq up" title="revealed Value" />)}
+          {Array.from({ length: pl.essence }, (_, i) => <span key={i} className="ess sq" title="face-down Value" />)}
+          <span className="ess-count">{pl.lost}/{pl.lost + pl.essence}</span>
           <span className="ess heart" title="Heart">♥</span>
         </button>
         <div className="pile-links">

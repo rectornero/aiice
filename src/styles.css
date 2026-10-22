@@ -320,3 +320,28 @@ input, select { background: var(--bg2); color: var(--text); border: 1px solid va
 button.essence { background: none; border: 0; padding: 2px 4px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
 button.essence:hover, button.essence:focus-visible { background: rgba(79, 179, 255, .12); outline: none; }
 .ess.heart { color: #ff6b8b; margin-left: 2px; }
+
+/* Essence: revealed Values count up, then the Heart */
+.ess.sq { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1.5px solid #5fd0ff; margin: 0 1px; vertical-align: middle; }
+.ess.sq.up { background: #5fd0ff; }
+.ess-count { font-size: 11px; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+/* cinematic calls */
+.overlay.call { z-index: 30; background: radial-gradient(ellipse at center, rgba(40, 20, 90, .85), rgba(3, 6, 18, .95)); cursor: pointer; }
+.overlay.call.heart { background: radial-gradient(ellipse at center, rgba(120, 10, 40, .85), rgba(3, 6, 18, .95)); }
+.call-body { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; max-width: 520px; }
+.call-line { font-weight: 800; letter-spacing: .5px; text-wrap: balance; animation: call-in .45s cubic-bezier(.2, .9, .3, 1.3) both; }
+.call-line.l0 { font-size: 22px; color: var(--text); }
+.call-line.l1 { font-size: 30px; color: #ffd34d; text-shadow: 0 0 18px rgba(255, 211, 77, .6); font-style: italic; }
+.heart .call-line.l1 { color: #ff6b8b; text-shadow: 0 0 18px rgba(255, 80, 120, .7); }
+.call-values { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.call-card { animation: call-flip .6s ease-out both; }
+.call-card .card.md { width: 150px; cursor: default; }
+.call-sub { color: var(--muted); font-size: 13px; }
+.call-heart { font-size: 72px; color: #ff6b8b; animation: call-beat .9s ease-in-out infinite; }
+.call-skip { color: var(--muted); font-size: 11px; opacity: .7; }
+@keyframes call-in { from { transform: scale(1.6); opacity: 0; letter-spacing: 6px; } to { transform: none; opacity: 1; } }
+@keyframes call-flip { from { transform: rotateY(90deg) scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes call-beat { 50% { transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .call-line, .call-card, .call-heart { animation: none; } }
+@media (max-width: 820px) { .call-line.l0 { font-size: 18px; } .call-line.l1 { font-size: 24px; } }

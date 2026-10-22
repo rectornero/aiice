@@ -170,7 +170,7 @@ export function destroy(s: GameState, uid: string): boolean {
   // HOUSE RULE (RULES.deathDefiant): death-defiant = "when it would be deleted, its owner loses 1 Essence instead".
   if (RULES.deathDefiant && hasTrait(s, uid, 'death-defiant')) {
     log(s, `${nm(c)} is death-defiant: ${pl.name} loses 1 Value instead.`)
-    loseEssence(s, p)
+    loseEssence(s, p, 1, nm(c))
     return false
   }
   removeTop(s, p, story.id)
@@ -366,7 +366,7 @@ export const EFFECTS: Record<string, Effect> = {
   'SOFA-027': {
     insteadOfDeletion: (s, _self, owner) => {
       log(s, `Kurogane Ikazuchi isn't deleted: ${s.players[owner].name} loses 1 Value instead.`)
-      loseEssence(s, owner)
+      loseEssence(s, owner, 1, 'Kurogane Ikazuchi')
       return true
     },
     afterFight: (s, self, owner, f) => {
@@ -486,7 +486,7 @@ export const EFFECTS: Record<string, Effect> = {
       const n = Math.floor(stars / 2)
       if (n) {
         log(s, `Starfall: ${s.players[other(owner)].name} loses ${n} Value${n === 1 ? '' : 's'}.`)
-        loseEssence(s, other(owner), n)
+        loseEssence(s, other(owner), n, 'Starfall')
       } else log(s, 'Starfall: not enough stars.')
     },
   },

@@ -158,6 +158,17 @@ export interface PendingChoice {
   data?: Record<string, string | number | boolean>
 }
 
+/** One hit on a player's Essence: a Value revealed, or the Heart reached. */
+export interface EssenceHit {
+  seq: number
+  player: PlayerIdx
+  /** what reached the Essence (an Entity's or card's name), if known */
+  source?: string
+  /** card ids of the Values revealed by this hit */
+  revealed: string[]
+  heart: boolean
+}
+
 export interface GameState {
   rng: number
   nextUid: number
@@ -171,6 +182,8 @@ export interface GameState {
   /** queue of decisions effects are waiting for; choices[0] is the current one */
   choices: PendingChoice[]
   lastFight: FightResult | null
+  /** V2.1: the latest hits on an Essence, for the app's cinematic calls; seq grows with every hit */
+  lastHit: EssenceHit | null
   winner: PlayerIdx | null
   log: string[]
 }
@@ -397,17 +410,24 @@ export function canSwapEssence(s: GameState, p: PlayerIdx, essenceUid: string, h
 }
 
 /** The player takes n hits: each reveals a face-down Value; a hit with none left reaches the Heart and ends the game. */
-export function loseEssence(s: GameState, p: PlayerIdx, n = 1) {
+export function loseEssence(s: GameState, p: PlayerIdx, n = 1, source?: string) {
   const pl = s.players[p]
+  const hit: EssenceHit = { seq: (s.lastHit?.seq ?? 0) + 1, player: p, revealed: [], heart: false }
+  if (source) hit.source = source
+  s.lastHit = hit
   for (let i = 0; i < n && s.winner === null; i++) {
     if (pl.essence <= 0) {
-      if (RULES.heart) heartHit(s, p)
+      if (RULES.heart) {
+        hit.heart = true
+        heartHit(s, p)
+      }
       break
     }
     const hidden = pl.essenceStack.filter((x) => !x.up)
     if (RULES.essenceCards && hidden.length === pl.essence) {
       const e = hidden[hidden.length - 1]
       e.up = true
+      hit.revealed.push(e.c.cardId)
       log(s, `${pl.name} reveals a Value: ${cardName(card(e.c))}.`)
       countEssence(pl)
     } else {
@@ -471,6 +491,7 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     pendingFight: null,
     choices: [],
     lastFight: null,
+    lastHit: null,
     winner: null,
     log: [],
   }
@@ -585,7 +606,7 @@ function step(s: GameState, a: Action): boolean {
         if (s.players[foe].stories.length > 0) return false
         story.attackedTurn = s.turn
         log(s, `${card(atk).name} reaches ${s.players[foe].name}'s Essence! “I Dream your Value!”`)
-        loseEssence(s, foe)
+        loseEssence(s, foe, 1, card(atk).name)
         return true
       }
       const target = attackTargets(s, foe).find((st) => st.id === a.target)
@@ -775,7 +796,7 @@ function resolveFight(s: GameState) {
   if (!loser) log(s, 'Tie: both Entities survive.')
   if (loser && RULES.fightLossCostsEssence && s.winner === null) {
     log(s, `${s.players[loser.player].name} lost the fight: they take a hit.`)
-    loseEssence(s, loser.player)
+    loseEssence(s, loser.player, 1, card(loser === attacker ? defender.card : attacker.card).name)
   }
   afterFight(s, [
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },

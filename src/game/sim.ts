@@ -3,7 +3,7 @@
 import { CARD_BY_ID, cardName } from './cards'
 import { botPolicyFor, type BotLevel } from './bot'
 import { whoMustAct } from './driver'
-import { newGame, reduce, type Action, type GameState, type PlayerIdx } from './engine'
+import { newGame, reduce, RULES, type Action, type GameState, type PlayerIdx } from './engine'
 
 export const MAX_TURNS = 80
 /** safety net: a game with more actions than this means a bot is looping */
@@ -20,6 +20,12 @@ export interface GameRecord {
   actions: number
   /** the game ended on a hit to the Heart */
   heart: boolean
+  /** players whose extra deck became Memories (V2.7) */
+  phase2: number
+  /** Values drawn from the Essence (V2.7) */
+  essenceDraws: number
+  /** the game ended with a player sharing their Heart (nothing left to draw) */
+  sharedHeart: boolean
   /** Essence hits that came from a Story laid bare (V2.2) */
   laidBare: number
   /** Essence hits from Memories that touch (V2.3) */
@@ -90,7 +96,10 @@ export function playGame(opts: {
     turns: Math.min(s.turn, maxTurns),
     winnerEssence: w === null ? 0 : s.players[w].essence,
     actions,
-    heart: w !== null && !!s.lastHit?.heart,
+    heart: w !== null && !!s.lastHit?.heart && !s.log.some((l) => l.includes('shares their Heart')),
+    phase2: s.players.filter((pl) => RULES.runningOut && pl.extra.length === 0).length,
+    essenceDraws: s.players.reduce((n, pl) => n + (pl.essenceDraws ?? 0), 0),
+    sharedHeart: s.log.some((l) => l.includes('shares their Heart')),
     laidBare,
     touches,
     changes,
@@ -115,6 +124,11 @@ export interface SimStats {
   firstPlayerWinRate: number
   /** share of decided games that ended on the Heart */
   heartRate: number
+  /** share of games where at least one player reached their extra deck */
+  phase2Rate: number
+  essenceDrawsPerGame: number
+  /** share of decided games lost by having nothing left to draw */
+  sharedHeartRate: number
   /** Stories laid bare per game */
   laidBarePerGame: number
   touchesPerGame: number
@@ -129,11 +143,14 @@ export interface SimStats {
 
 /** Plays `games` bot-vs-bot games. Seats alternate every game so both decks sit in both seats. */
 export function simulate(opts: { games: number; seed: number; decks: [string[], string[]]; levels?: [BotLevel, BotLevel]; maxTurns?: number }): SimStats {
-  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, chantsPerGame: 0, attackFlipRate: 0, defenseFlipRate: 0, played: {} }
+  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, phase2Rate: 0, essenceDrawsPerGame: 0, sharedHeartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, chantsPerGame: 0, attackFlipRate: 0, defenseFlipRate: 0, played: {} }
   let turns = 0
   let essence = 0
   let firstWins = 0
   let hearts = 0
+  let ph2 = 0
+  let edraws = 0
+  let shared = 0
   let bare = 0
   let touch = 0
   let change = 0
@@ -153,6 +170,9 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
     dm[0] += r.defenseModes[0]
     dm[1] += r.defenseModes[1]
     if (r.heart) hearts++
+    if (r.phase2) ph2++
+    edraws += r.essenceDraws
+    if (r.sharedHeart) shared++
     for (const [id, n] of Object.entries(r.played)) st.played[id] = (st.played[id] ?? 0) + n
     if (r.winnerDeck === null || r.winnerSeat === null) {
       st.draws++
@@ -168,6 +188,9 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   st.avgWinnerEssence = decided ? essence / decided : 0
   st.firstPlayerWinRate = decided ? firstWins / decided : 0
   st.heartRate = decided ? hearts / decided : 0
+  st.phase2Rate = opts.games ? ph2 / opts.games : 0
+  st.essenceDrawsPerGame = opts.games ? edraws / opts.games : 0
+  st.sharedHeartRate = decided ? shared / decided : 0
   st.laidBarePerGame = opts.games ? bare / opts.games : 0
   st.touchesPerGame = opts.games ? touch / opts.games : 0
   st.changesPerGame = opts.games ? change / opts.games : 0

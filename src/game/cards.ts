@@ -157,3 +157,16 @@ export const STARTER_DECKS: Record<string, { name: string; cards: string[] }> = 
     ],
   },
 }
+
+/** V2.7 (Nero, rulebook §8b): each player sets aside a 10-card extra deck. Its contents are still open; the
+ *  placeholder is 10 more cards of the deck's main Domain without a Heart mark (so a deck keeps its 5 ♥). */
+export const EXTRA_DECKS: Record<string, string[]> = {
+  Music: ['SOFA-004', 'SOFA-005', 'SOFA-005', 'SOFA-M01', 'SOFA-M02', 'SOFA-M04', 'SOFA-096', 'SI-C02', 'SI-C02', 'SI-C04'],
+  Fate: ['SOFA-024', 'SOFA-F01', 'SOFA-F02', 'SOFA-F02', 'SOFA-027', 'SOFA-F03', 'SOFA-F04', 'SOFA-097', 'SI-C05', 'SI-C07'],
+}
+export function extraDeckFor(cards: string[]): string[] {
+  const n: Record<string, number> = {}
+  for (const id of cards) { const d = CARD_BY_ID[id]?.domain; if (d) n[d] = (n[d] ?? 0) + 1 }
+  const main = Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0]
+  return main ? EXTRA_DECKS[main] ?? [] : []
+}

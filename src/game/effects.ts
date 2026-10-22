@@ -8,7 +8,7 @@
 
 import { cardName, type Card } from './cards'
 import {
-  card, disperseOne, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, shuffle, top, UNDELETABLE,
+  card, disperseOne, drawOne, refillMemories, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, shuffle, top, UNDELETABLE,
   type CardInst, type GameState, type PendingChoice, type PlayerIdx, type Trait, type TraitInfo,
 } from './engine'
 
@@ -216,9 +216,8 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     pl.memories = [...pl.memories.filter((c) => !picks.includes(c.uid)), ...moved]
     log(s, `${ch.data?.src}: ${pl.name} puts ${moved.length} card${moved.length === 1 ? '' : 's'} on the bottom of their Memories.`)
     if (ch.data?.draw) {
-      const c = pl.memories.shift()
-      if (c) pl.thoughts.push(c)
       log(s, `${ch.data?.src}: ${pl.name} draws 1.`)
+      drawOne(s, ch.player)
     }
   },
   cov1: (s, ch, picks) => {
@@ -530,6 +529,7 @@ export const EFFECTS: Record<string, Effect> = {
   'SI-C07': {
     onEnter: (s, _self, owner) => {
       const pl = s.players[owner]
+      if (RULES.runningOut) refillMemories(s, owner)
       const flipped = pl.memories.splice(0, 3)
       pl.memories.push(...flipped)
       const stars = flipped.reduce((n, c) => n + card(c).stars, 0)

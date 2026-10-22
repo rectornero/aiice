@@ -138,3 +138,14 @@ When your Chant completes, you may hide one revealed Value. Either swap it with 
 
 Revealed Values never go back face down (every Change of Values trigger is off; the switches stay for the simulator). The second player draws 6 at setup.
 Sim, 1000 games: Music 44.4%, Fate 52.8%, draws 2.8%, first player 49.0%, 15.7 turns, the winner keeps 3.61 Values face down, 1.94 touches and 1.20 laid-bare Stories per game.
+
+## v2.7: running out (Nero, 2026-10-22, rulebook §8b), and 5 ♥ per deck locked
+
+Each player sets aside a 10-card extra deck (30 cards in all). When Memories run out, the extra deck becomes Memories. When that runs out too, each draw takes a face-down Value from the Essence into Thoughts. With nothing left to draw, the player shares their Heart and loses. The extra deck's contents are still open. The app and the sim use 10 more cards of the deck's Domain with no ♥ (cards.ts EXTRA_DECKS). "{N} per game" uses were already tracked by the app.
+
+| rules | Music | Fate | draws | 1st player | turns | extra deck reached | Essence draws / game | lost by sharing the Heart |
+|---|---|---|---|---|---|---|---|---|
+| v2.6 | 44.4% | 52.8% | 2.8% | 49.0% | 15.7 | — | — | — |
+| v2.7 | 44.5% | 55.5% | 0% | 47.4% | 14.3 | 49% of games | 0.02 | 2.3% of games |
+
+The old 2.8% draws were stalled games that hit the 80-turn cap. Now they end, mostly on the Heart, and turns drop because those 80-turn games are gone. Fate's rise to 55.5% probably comes from its placeholder extra deck.

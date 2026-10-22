@@ -18,14 +18,14 @@ describe.skipIf(!env.VARIANTS)('rules variants', () => {
   it('compares variants', () => {
     const games = Number(env.GAMES ?? 600)
     const base = { ...RULES }
-    const rows: string[] = ['variant | Music | Fate | draws | 1st player | turns | winner Values | Heart | laid bare/game | touches/game | changes/game | Chants/game | attacker flips | defender flips']
+    const rows: string[] = ['variant | Music | Fate | draws | 1st player | turns | winner Values | Heart | extra deck reached | Essence draws/game | shared Heart | laid bare/game | touches/game | changes/game | Chants/game | attacker flips | defender flips']
     for (const [name, knobs, decks] of VARIANTS) {
       Object.assign(RULES, base, knobs)
       HEART_MARKS.clear()
       for (const id of decks?.hearts ?? []) HEART_MARKS.add(id)
       const st = simulate({ games, seed: 7, decks: [decks?.music ?? STARTER_DECKS.music.cards, decks?.fate ?? STARTER_DECKS.fate.cards] })
       const pct = (n: number) => `${((100 * n) / games).toFixed(1)}%`
-      rows.push(`${name} | ${pct(st.wins[0])} | ${pct(st.wins[1])} | ${pct(st.draws)} | ${(100 * st.firstPlayerWinRate).toFixed(1)}% | ${st.avgTurns.toFixed(1)} | ${st.avgWinnerEssence.toFixed(2)} | ${(100 * st.heartRate).toFixed(0)}% | ${st.laidBarePerGame.toFixed(2)} | ${st.touchesPerGame.toFixed(2)} | ${st.changesPerGame.toFixed(2)} | ${st.chantsPerGame.toFixed(2)} | ${(100 * st.attackFlipRate).toFixed(0)}% | ${(100 * st.defenseFlipRate).toFixed(0)}%`)
+      rows.push(`${name} | ${pct(st.wins[0])} | ${pct(st.wins[1])} | ${pct(st.draws)} | ${(100 * st.firstPlayerWinRate).toFixed(1)}% | ${st.avgTurns.toFixed(1)} | ${st.avgWinnerEssence.toFixed(2)} | ${(100 * st.heartRate).toFixed(0)}% | ${(100 * st.phase2Rate).toFixed(1)}% | ${st.essenceDrawsPerGame.toFixed(3)} | ${(100 * st.sharedHeartRate).toFixed(1)}% | ${st.laidBarePerGame.toFixed(2)} | ${st.touchesPerGame.toFixed(2)} | ${st.changesPerGame.toFixed(2)} | ${st.chantsPerGame.toFixed(2)} | ${(100 * st.attackFlipRate).toFixed(0)}% | ${(100 * st.defenseFlipRate).toFixed(0)}%`)
     }
     Object.assign(RULES, base)
     HEART_MARKS.clear()

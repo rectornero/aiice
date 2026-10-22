@@ -13,7 +13,7 @@
 //   cards in choices[0].player's own pile (show them to that player). Pick between min and max of them.
 // - bonusDetails / traitDetails say where a value comes from; UNDELETABLE is the "can't be deleted" trait.
 
-import { CARD_BY_ID, cardName, type Card } from './cards'
+import { CARD_BY_ID, cardName, extraDeckFor, type Card } from './cards'
 import { activate, afterFight, offerChangeOfValues, computeField, destroy, enter, forgotten, resolveChoice, storedTraits, type FieldEntity } from './effects'
 
 export type PlayerIdx = 0 | 1
@@ -65,6 +65,9 @@ export const RULES = {
   changeForAttacker: false,
   /** where Change of Values comes from: completing your Chant (Nero's pick, rulebook §7) or a defender's ♥ win (old v2.4) */
   changeTrigger: 'chant' as 'defender' | 'chant',
+  /** V2.7 running out (Nero, rulebook §8b): a 10-card extra deck becomes Memories when they run out; after that each
+   *  draw takes a face-down Value into Thoughts; with nothing left to draw you share your Heart and lose. */
+  runningOut: true,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -127,6 +130,10 @@ export interface PlayerState {
   /** last turn this player swapped a revealed Essence card */
   swappedTurn: number
   memories: CardInst[]
+  /** V2.7: the extra deck, set aside until Memories run out */
+  extra: CardInst[]
+  /** V2.7: Values drawn from the Essence because nothing else was left */
+  essenceDraws?: number
   thoughts: CardInst[]
   stories: Story[]
   /** V2: the Chant: Words in the order they were added */
@@ -389,14 +396,34 @@ export function log(s: GameState, msg: string) {
   s.log = [...s.log.slice(-199), msg]
 }
 
-function drawOne(s: GameState, p: PlayerIdx) {
+/** V2.7: when Memories are empty, the extra deck becomes Memories. */
+export function refillMemories(s: GameState, p: PlayerIdx) {
   const pl = s.players[p]
+  if (pl.memories.length || !pl.extra?.length) return
+  pl.memories = pl.extra
+  pl.extra = []
+  log(s, `${pl.name}'s Memories run out: their extra deck becomes their Memories.`)
+}
+
+export function drawOne(s: GameState, p: PlayerIdx, setup = false) {
+  const pl = s.players[p]
+  if (RULES.runningOut) refillMemories(s, p)
   const c = pl.memories.shift()
-  if (!c) {
-    log(s, `${pl.name}'s Memories are empty, nothing to draw.`)
+  if (c) return void pl.thoughts.push(c)
+  if (!RULES.runningOut || setup) return log(s, `${pl.name}'s Memories are empty, nothing to draw.`)
+  // nothing left but the Essence: draw a face-down Value (self-damage); with none left, share your Heart
+  const i = pl.essenceStack.findIndex((e) => !e.up)
+  if (i >= 0 && RULES.essenceCards) {
+    const [v] = pl.essenceStack.splice(i, 1)
+    pl.thoughts.push(v.c)
+    pl.essenceDraws = (pl.essenceDraws ?? 0) + 1
+    countEssence(pl)
+    log(s, `${pl.name} has nothing left to draw: they take a face-down Value from their Essence into their Thoughts.`)
     return
   }
-  pl.thoughts.push(c)
+  if (s.winner !== null) return
+  s.winner = other(p)
+  log(s, `${pl.name} has nothing left to draw and shares their Heart: ${s.players[other(p)].name} wins!`)
 }
 
 /** Recounts essence / lost from the Essence stack (essenceCards only). */
@@ -506,7 +533,7 @@ function clone(s: GameState): GameState {
 
 // ---------- setup ----------
 
-export function newGame(opts: { seed: number; decks: [string[], string[]]; names: [string, string] }): GameState {
+export function newGame(opts: { seed: number; decks: [string[], string[]]; names: [string, string]; extras?: [string[], string[]] }): GameState {
   const s: GameState = {
     rng: opts.seed | 0,
     nextUid: 1,
@@ -520,6 +547,7 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
       essenceStack: [],
       swappedTurn: 0,
       memories: [],
+      extra: [],
       thoughts: [],
       stories: [],
       chants: [],
@@ -539,14 +567,18 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     const pl = s.players[p]
     pl.memories = opts.decks[p].map((cardId) => ({ uid: `c${s.nextUid++}`, cardId }))
     shuffle(s, pl.memories)
+    if (RULES.runningOut) {
+      pl.extra = (opts.extras?.[p] ?? extraDeckFor(opts.decks[p])).map((cardId) => ({ uid: `c${s.nextUid++}`, cardId }))
+      shuffle(s, pl.extra)
+    }
     if (RULES.essenceCards) {
       pl.essenceStack = pl.memories.splice(0, RULES.startingEssence).map((c) => ({ c, up: false }))
       countEssence(pl)
     }
-    for (let i = 0; i < RULES.openingHand; i++) drawOne(s, p)
+    for (let i = 0; i < RULES.openingHand; i++) drawOne(s, p, true)
   }
   s.active = rand(s) < 0.5 ? 0 : 1
-  if (RULES.secondPlayerExtraCard) drawOne(s, other(s.active))
+  if (RULES.secondPlayerExtraCard) drawOne(s, other(s.active), true)
   log(s, `${s.players[s.active].name} goes first (and skips the first draw).`)
   return s
 }
@@ -818,6 +850,7 @@ function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode
   }
   const pl = s.players[player]
   const flips = flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0)
+  if (RULES.runningOut) refillMemories(s, player)
   const flipped = pl.memories.splice(0, flips)
   pl.memories.push(...flipped) // flipped cards go to the bottom of Memories
   const base = flipped.reduce((n, x) => n + card(x).stars, 0)

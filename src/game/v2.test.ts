@@ -247,3 +247,26 @@ describe('V2.4: Change of Values', () => {
     RULES.changeOfValues = false
   })
 })
+
+describe('V2.7: running out', () => {
+  it('the extra deck becomes Memories, then draws take face-down Values, then you share your Heart', () => {
+    let s = table({ field: [[], ['SOFA-M03']] })
+    const pl = () => s.players[1]
+    s.players[1].extra = [inst('SOFA-001')]
+    s = reduce(s, { t: 'endTurn' })
+    expect(pl().thoughts.map((c) => c.cardId)).toEqual(['SOFA-001'])
+    expect(pl().extra).toHaveLength(0)
+    s.active = 0
+    for (let i = 0; i < 5; i++) {
+      s.active = 0
+      s.phase = 'main'
+      s = reduce(s, { t: 'endTurn' })
+      expect(s.winner).toBe(null)
+    }
+    expect(pl().essenceStack).toHaveLength(0)
+    s.active = 0
+    s.phase = 'main'
+    s = reduce(s, { t: 'endTurn' })
+    expect(s.winner).toBe(0)
+  })
+})

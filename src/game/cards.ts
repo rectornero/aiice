@@ -89,6 +89,8 @@ export interface Card {
   eclipse?: boolean
   /** ⚡ Surge mark (Nero, 2026-10-22): flipped in a fight, you flip one more card */
   surge?: boolean
+  /** Card design 2.0: a dual-domain card's second domain (a smaller disc on the card) */
+  domain2?: string
   /** ◈ Shield mark (Nero, 2026-10-22): flipped in a fight, your Entity can't be told this fight */
   shield?: boolean
 }

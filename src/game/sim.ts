@@ -28,6 +28,7 @@ export interface GameRecord {
   changes: number
   /** attacker's mode choices: [flip, sure] */
   attackModes: [number, number]
+  defenseModes: [number, number]
   /** times each card entered the field (started or continued a Story) */
   played: Record<string, number>
 }
@@ -54,6 +55,7 @@ export function playGame(opts: {
   let touches = 0
   let changes = 0
   const modes = [0, 0]
+  const dmodes = [0, 0]
   while (s.winner === null && s.turn <= maxTurns) {
     const p = whoMustAct(s)
     if (p === null) break
@@ -66,6 +68,7 @@ export function playGame(opts: {
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'bare') laidBare++
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'touch') touches++
     if (a.t === 'choose' && s.choices[0]?.effect === 'cov2' && a.picks.length) changes++
+    if (a.t === 'chooseMode' && s.pendingFight?.defender.player === a.player) dmodes[a.mode === 'flip' ? 0 : 1]++
     if (a.t === 'chooseMode' && s.pendingFight?.attacker.player === a.player) modes[a.mode === 'flip' ? 0 : 1]++
     const now = new Set<string>()
     for (const pl of next.players) for (const st of pl.stories) for (const c of st.cards) {
@@ -88,6 +91,7 @@ export function playGame(opts: {
     touches,
     changes,
     attackModes: [modes[0], modes[1]],
+    defenseModes: [dmodes[0], dmodes[1]],
     played,
   }
 }
@@ -112,13 +116,14 @@ export interface SimStats {
   changesPerGame: number
   /** share of attacks where the attacker flipped instead of taking the sure hit */
   attackFlipRate: number
+  defenseFlipRate: number
   /** times each card entered the field, over all games */
   played: Record<string, number>
 }
 
 /** Plays `games` bot-vs-bot games. Seats alternate every game so both decks sit in both seats. */
 export function simulate(opts: { games: number; seed: number; decks: [string[], string[]]; levels?: [BotLevel, BotLevel]; maxTurns?: number }): SimStats {
-  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, attackFlipRate: 0, played: {} }
+  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, attackFlipRate: 0, defenseFlipRate: 0, played: {} }
   let turns = 0
   let essence = 0
   let firstWins = 0
@@ -127,6 +132,7 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   let touch = 0
   let change = 0
   const am = [0, 0]
+  const dm = [0, 0]
   for (let g = 0; g < opts.games; g++) {
     const seed = (Math.imul(opts.seed ^ 0x5bd1e995, 31) + Math.imul(g + 1, 0x9e3779b1)) | 0
     const r = playGame({ seed, decks: opts.decks, levels: opts.levels ?? ['normal', 'normal'], swap: g % 2 === 1, maxTurns: opts.maxTurns })
@@ -136,6 +142,8 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
     change += r.changes
     am[0] += r.attackModes[0]
     am[1] += r.attackModes[1]
+    dm[0] += r.defenseModes[0]
+    dm[1] += r.defenseModes[1]
     if (r.heart) hearts++
     for (const [id, n] of Object.entries(r.played)) st.played[id] = (st.played[id] ?? 0) + n
     if (r.winnerDeck === null || r.winnerSeat === null) {
@@ -156,6 +164,7 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   st.touchesPerGame = opts.games ? touch / opts.games : 0
   st.changesPerGame = opts.games ? change / opts.games : 0
   st.attackFlipRate = am[0] + am[1] ? am[0] / (am[0] + am[1]) : 0
+  st.defenseFlipRate = dm[0] + dm[1] ? dm[0] / (dm[0] + dm[1]) : 0
   return st
 }
 

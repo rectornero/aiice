@@ -69,7 +69,7 @@ function flipDist(s: GameState, p: PlayerIdx, flips: number, bonus: number): Dis
 
 function sideDist(s: GameState, p: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): Dist {
   const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
-  return mode === 'sure' ? [[sureOf(s, c) + bonus, 1]] : flipDist(s, p, flipsFor(s, c), bonus)
+  return mode === 'sure' ? [[sureOf(s, c) + bonus, 1]] : flipDist(s, p, flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0), bonus)
 }
 
 /** Probabilities that the attacker wins / loses (a tie changes nothing). */
@@ -181,8 +181,8 @@ function smartPicks(s: GameState, ch: PendingChoice): string[] {
     return c ? handValue(s, p, c) : 0
   }
   // Change of Values: always take the best revealed Value back, then bury the weakest card in hand
-  if (ch.effect === 'cov1') return [...ch.options].sort((a, b) => val(b) - val(a)).slice(0, 1)
-  if (ch.effect === 'cov2') return [...ch.options].sort((a, b) => val(a) - val(b)).slice(0, 1)
+  if (ch.effect === 'cov1') return [...ch.options].sort((a, b) => val(b) - val(a)).slice(0, max)
+  if (ch.effect === 'cov2') return [...ch.options].sort((a, b) => val(a) - val(b)).slice(0, max)
   const ranked = [...ch.options].sort((a, b) => (harmful ? val(a) - val(b) : val(b) - val(a)))
   return ranked.slice(0, harmful ? min : max)
 }
@@ -379,7 +379,7 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
         const da = sideDist(s, f.attacker.player, topOf(aSt), am, 'attacker')
         // V2.4: winning a flip with a Heart card can heal a revealed Value
         const pl = s.players[p]
-        const heal = RULES.changeOfValues && pl.lost > 0 && pl.thoughts.length ? touchChance(s, p, flipsFor(s, topOf(dSt))) * essenceWorth(s, p) : 0
+        const heal = RULES.changeOfValues && pl.lost > 0 && pl.thoughts.length ? touchChance(s, p, flipsFor(s, topOf(dSt)) + RULES.defenseExtraFlips) * essenceWorth(s, p) * Math.min(RULES.changeMax, pl.lost, pl.thoughts.length) : 0
         const score = (md: FightMode) => {
           const o = odds(da, sideDist(s, p, topOf(dSt), md, 'defender'))
           return o.lose * vA - o.win * (vD + (md === 'flip' ? heal : 0))

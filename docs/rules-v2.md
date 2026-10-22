@@ -92,3 +92,24 @@ Sim, 1000 games each, 5 ♥ per deck:
 | v2.3 + 2nd player starts with 6 (no Change) | 44.4% | 52.8% | 2.8% | 49.0% | 15.7 | 3.61 | 1.94 | 0 | 36% |
 
 Change of Values almost never happens (about once per 70 games). Defenders flip only about 1 time in 5, and it also needs a win, a ♥, a revealed Value and a card in hand. The first-player edge is fixed by the 6th card, not by Hearts.
+
+### Buffing Change of Values (Nero: "Buff Change of Values. Test.")
+
+1000 games each, on v2.4 with 5 ♥. "+6" means the second player starts with 6 cards.
+
+| variant | Music | Fate | 1st player | turns | winner's face-down Values | Changes / game | defender flips |
+|---|---|---|---|---|---|---|---|
+| v2.4 | 45.3% | 51.6% | 54.8% | 15.7 | 3.81 | 0.01 | 21% |
+| A defenders flip +1 | 42.9% | 54.5% | 52.7% | 15.7 | 3.83 | 0.06 | 37% |
+| B hide up to 2 | 45.0% | 51.9% | 55.5% | 15.7 | 3.82 | 0.01 | 21% |
+| C ties count | 45.3% | 51.6% | 54.7% | 15.7 | 3.82 | 0.04 | 21% |
+| D = A + B | 43.0% | 54.2% | 52.5% | 15.8 | 3.85 | 0.05 | 37% |
+| v2.4 +6 | 45.4% | 52.0% | 49.1% | 15.2 | 3.71 | 0.01 | 21% |
+| A +6 | 42.3% | 54.0% | 49.1% | 16.3 | 3.87 | 0.05 | 34% |
+| B +6 | 45.9% | 51.5% | 49.0% | 15.2 | 3.72 | 0.01 | 20% |
+| C +6 | 45.4% | 52.0% | 48.9% | 15.2 | 3.72 | 0.04 | 21% |
+| D +6 | 42.3% | 53.8% | 49.3% | 16.5 | 3.87 | 0.04 | 34% |
+| E (extra idea) an attacker that touches may also Change | 44.8% | 51.8% | 54.0% | 16.1 | 4.07 | 0.48 | 21% |
+| E +6 | 44.7% | 52.5% | 48.8% | 15.5 | 3.98 | 0.47 | 21% |
+
+Switches: RULES.defenseExtraFlips, changeMax, changeOnTie, changeForAttacker (all off by default).

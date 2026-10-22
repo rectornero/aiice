@@ -225,21 +225,25 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     const pl = s.players[ch.player]
     if (!picks.length) return log(s, `${pl.name} keeps their Values as they are.`)
     ask(s, {
-      player: ch.player, sourceUid: ch.sourceUid, zone: 'thoughts', options: pl.thoughts.map((c) => c.uid), min: 1, max: 1, effect: 'cov2',
-      data: { ...ch.data, value: picks[0] }, prompt: 'Change of Values: choose a card from your Thoughts to put into your Essence face down.',
+      player: ch.player, sourceUid: ch.sourceUid, zone: 'thoughts', options: pl.thoughts.map((c) => c.uid), min: picks.length, max: picks.length, effect: 'cov2',
+      data: { ...ch.data, value: picks.join(',') },
+      prompt: `Change of Values: choose ${picks.length === 1 ? 'a card' : `${picks.length} cards`} from your Thoughts to put into your Essence face down.`,
     }, '')
   },
   cov2: (s, ch, picks) => {
     const pl = s.players[ch.player]
-    const e = pl.essenceStack.find((x) => x.c.uid === ch.data?.value && x.up)
-    const h = pl.thoughts.find((c) => c.uid === picks[0])
-    if (!e || !h) return
-    pl.thoughts = [...pl.thoughts.filter((c) => c !== h), e.c]
-    log(s, `Change of Values: ${pl.name} takes back ${cardName(card(e.c))} and puts a new Value face down.`)
-    e.c = h
-    e.up = false
-    pl.essence++
-    pl.lost--
+    const values = String(ch.data?.value ?? '').split(',')
+    picks.forEach((uid, i) => {
+      const e = pl.essenceStack.find((x) => x.c.uid === values[i] && x.up)
+      const h = pl.thoughts.find((c) => c.uid === uid)
+      if (!e || !h) return
+      pl.thoughts = [...pl.thoughts.filter((c) => c !== h), e.c]
+      log(s, `Change of Values: ${pl.name} takes back ${cardName(card(e.c))} and puts a new Value face down.`)
+      e.c = h
+      e.up = false
+      pl.essence++
+      pl.lost--
+    })
   },
   hiroshi: (s, ch, picks) => {
     const pl = s.players[ch.player]
@@ -263,8 +267,10 @@ export function offerChangeOfValues(s: GameState, p: PlayerIdx, by: CardInst) {
   if (!up.length || !pl.thoughts.length) return
   log(s, `${nm(by)}'s Memories touch back: ${pl.name} may change a Value.`)
   ask(s, {
-    player: p, sourceUid: by.uid, zone: 'essence', options: up, min: 0, max: 1, effect: 'cov1', data: { src: nm(by) },
-    prompt: `Change of Values: choose a revealed Value to take into your Thoughts (or none).`,
+    player: p, sourceUid: by.uid, zone: 'essence', options: up, min: 0, max: Math.min(RULES.changeMax, pl.thoughts.length), effect: 'cov1', data: { src: nm(by) },
+    prompt: RULES.changeMax > 1
+      ? `Change of Values: choose up to ${RULES.changeMax} revealed Values to take into your Thoughts (or none).`
+      : `Change of Values: choose a revealed Value to take into your Thoughts (or none).`,
   }, '')
 }
 

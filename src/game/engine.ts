@@ -56,6 +56,12 @@ export const RULES = {
   /** V2.4 "Change of Values" (Nero, 2026-10-22): a defender that wins a fight in which it flipped a Heart-marked card
    *  may swap one of its revealed Values with a card from its Thoughts; the new card goes into the Essence face down. */
   changeOfValues: true,
+  /** V2.4 buff candidates: defenders flip this many extra cards; Change hides up to N Values; a tie also counts. */
+  defenseExtraFlips: 0,
+  changeMax: 1,
+  changeOnTie: false,
+  /** candidate: an attacker that touches may also make a Change of Values */
+  changeForAttacker: false,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -807,7 +813,7 @@ function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode
     return { player, card: c, mode, base, bonus, flips: 0, flipped: [], total: base + bonus }
   }
   const pl = s.players[player]
-  const flips = flipsFor(s, c)
+  const flips = flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0)
   const flipped = pl.memories.splice(0, flips)
   pl.memories.push(...flipped) // flipped cards go to the bottom of Memories
   const base = flipped.reduce((n, x) => n + card(x).stars, 0)
@@ -832,12 +838,13 @@ function resolveFight(s: GameState) {
   if (RULES.memoriesTouch && outcome === 'attacker' && s.winner === null && attacker.flipped.some(hasHeartMark)) {
     log(s, `${cardName(card(attacker.card))}'s Memories touch ${s.players[defender.player].name}: “I Dream your Value!”`)
     loseEssence(s, defender.player, 1, cardName(card(attacker.card)), 'touch')
+    if (RULES.changeOfValues && RULES.changeForAttacker && s.winner === null) offerChangeOfValues(s, attacker.player, attacker.card)
   }
   if (loser && RULES.fightLossCostsEssence && s.winner === null) {
     log(s, `${s.players[loser.player].name} lost the fight: they take a hit.`)
     loseEssence(s, loser.player, 1, card(loser === attacker ? defender.card : attacker.card).name)
   }
-  if (RULES.changeOfValues && outcome === 'defender' && s.winner === null && defender.flipped.some(hasHeartMark)) offerChangeOfValues(s, defender.player, defender.card)
+  if (RULES.changeOfValues && (outcome === 'defender' || (RULES.changeOnTie && outcome === 'tie')) && s.winner === null && defender.flipped.some(hasHeartMark)) offerChangeOfValues(s, defender.player, defender.card)
   afterFight(s, [
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
     { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },

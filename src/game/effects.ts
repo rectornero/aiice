@@ -8,7 +8,7 @@
 
 import { cardName, type Card } from './cards'
 import {
-  card, disperseOne, drawOne, refillMemories, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, shuffle, top, UNDELETABLE,
+  card, disperseOne, drawOne, flipCards, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, shuffle, top, UNDELETABLE,
   type CardInst, type GameState, type PendingChoice, type PlayerIdx, type Trait, type TraitInfo,
 } from './engine'
 
@@ -529,9 +529,7 @@ export const EFFECTS: Record<string, Effect> = {
   'SI-C07': {
     onEnter: (s, _self, owner) => {
       const pl = s.players[owner]
-      if (RULES.runningOut) refillMemories(s, owner)
-      const flipped = pl.memories.splice(0, 3)
-      pl.memories.push(...flipped)
+      const flipped = flipCards(s, owner, 3)
       const stars = flipped.reduce((n, c) => n + card(c).stars, 0)
       log(s, `Starfall: ${pl.name} flips ${flipped.map((c) => `${card(c).name} (${card(c).stars}★)`).join(', ') || 'nothing'}: ${stars} star${stars === 1 ? '' : 's'}.`)
       const n = Math.floor(stars / 2)

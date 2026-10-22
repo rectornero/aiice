@@ -160,3 +160,8 @@ Is 15 Memories enough? 1000 games each (the 25-card main deck adds 5 more non-โ
 |---|---|---|---|---|---|---|---|---|---|
 | 20 + 10 | 44.5% | 55.5% | 47.4% | 14.3 | 49% | 38% | 15.3 | 1.5% | 2.3% |
 | 25 + 10 | 42.1% | 57.9% | 41.1% | 14.1 | 11% | 7% | 22.7 | 0.2% | 0.2% |
+
+### Thin Memories flip from the Subconscious (Nero, rulebook ยง9)
+
+If Memories hold fewer cards than you must flip, flip the rest from the top of the Subconscious, then put them back on top of it in the same order. Once the Subconscious has become Memories, you flip what you have.
+Sim, 1000 games: Music 43.3%, Fate 56.7%, first player 45.0% (was 47.4%), 14.0 turns. Attackers flip 43% (was 37%), defenders 35% (was 30%). Someone reaches the Subconscious in 50% of games, on turn 14.5 on average, and 1.1% of games end by sharing the Heart.

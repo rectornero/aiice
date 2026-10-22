@@ -408,6 +408,17 @@ export function refillMemories(s: GameState, p: PlayerIdx) {
   log(s, `${pl.name}'s Memories run out: their Subconscious becomes their Memories.`)
 }
 
+/** Flips n cards: from the top of Memories (they go to the bottom). Rulebook §9: if Memories hold fewer than n,
+ *  the rest come from the top of the Subconscious and go back on top of it in the same order. */
+export function flipCards(s: GameState, p: PlayerIdx, n: number): CardInst[] {
+  const pl = s.players[p]
+  if (RULES.runningOut) refillMemories(s, p)
+  const flipped = pl.memories.splice(0, n)
+  pl.memories.push(...flipped)
+  if (RULES.runningOut && flipped.length < n && pl.extra?.length) flipped.push(...pl.extra.slice(0, n - flipped.length))
+  return flipped
+}
+
 export function drawOne(s: GameState, p: PlayerIdx, setup = false) {
   const pl = s.players[p]
   if (RULES.runningOut) refillMemories(s, p)
@@ -851,11 +862,8 @@ function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode
     const base = sureOf(s, c)
     return { player, card: c, mode, base, bonus, flips: 0, flipped: [], total: base + bonus }
   }
-  const pl = s.players[player]
   const flips = flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0)
-  if (RULES.runningOut) refillMemories(s, player)
-  const flipped = pl.memories.splice(0, flips)
-  pl.memories.push(...flipped) // flipped cards go to the bottom of Memories
+  const flipped = flipCards(s, player, flips)
   const base = flipped.reduce((n, x) => n + card(x).stars, 0)
   return { player, card: c, mode, base, bonus, flips, flipped, total: base + bonus }
 }

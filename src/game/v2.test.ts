@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { destroy } from './effects'
-import { attackTargets, canChant, hasTrait, newGame, reduce, RULES, top, type CardInst, type FightMode, type GameState, type PlayerIdx } from './engine'
+import { attackTargets, canChant, flipCards, hasTrait, newGame, reduce, RULES, top, type CardInst, type FightMode, type GameState, type PlayerIdx } from './engine'
 
 // Rules v2 (self-iteration): Chant row, 3 Stories, brave/charming, defender, ill-fated fading, comeback draw.
 
@@ -268,5 +268,17 @@ describe('V2.7: running out', () => {
     s.phase = 'main'
     s = reduce(s, { t: 'endTurn' })
     expect(s.winner).toBe(0)
+  })
+})
+
+describe('V2.7: thin Memories flip from the Subconscious', () => {
+  it('flips the rest from the top of the Subconscious and leaves it in order', () => {
+    const s = table({ memories: [['SOFA-001'], []] })
+    s.players[0].extra = [inst('SOFA-028'), inst('SOFA-003'), inst('SOFA-004')]
+    const order = s.players[0].extra.map((c) => c.uid)
+    const f = flipCards(s, 0, 3)
+    expect(f.map((c) => c.cardId)).toEqual(['SOFA-001', 'SOFA-028', 'SOFA-003'])
+    expect(s.players[0].extra.map((c) => c.uid)).toEqual(order)
+    expect(s.players[0].memories.map((c) => c.cardId)).toEqual(['SOFA-001'])
   })
 })

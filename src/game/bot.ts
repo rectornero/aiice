@@ -53,7 +53,9 @@ export function avgStars(s: GameState, p: PlayerIdx) {
 
 /** Exact distribution of flipping `flips` cards from the player's Memories (drawn without replacement, order unknown). */
 function flipDist(s: GameState, p: PlayerIdx, flips: number, bonus: number): Dist {
-  const mem = s.players[p].memories
+  const pl = s.players[p]
+  // rulebook §9: a thin Memories tops up its flips from the Subconscious (approximated as one pool)
+  const mem = RULES.runningOut && pl.memories.length < flips ? [...pl.memories, ...(pl.extra ?? [])] : pl.memories
   const n = [0, 0, 0]
   for (const c of mem) n[cardOf(c).stars]++
   const k = Math.min(flips, mem.length)

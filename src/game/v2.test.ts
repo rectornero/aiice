@@ -16,6 +16,9 @@ function table(o: { field?: Pair<string[]>; hand?: Pair<string[]>; memories?: Pa
     pl.stories = (o.field?.[p] ?? []).map((x) => ({ id: `st${n++}`, cards: [inst(x)], startedTurn: 0, movedTurn: 0, attackedTurn: 0 }))
     pl.thoughts = (o.hand?.[p] ?? []).map(inst)
     pl.memories = (o.memories?.[p] ?? []).map(inst)
+    pl.essenceStack = Array.from({ length: RULES.startingEssence }, () => ({ c: inst('SOFA-M03'), up: false }))
+    pl.essence = RULES.startingEssence
+    pl.lost = 0
     pl.chants = (o.chants?.[p] ?? []).map(inst)
   }
   return structuredClone(s)
@@ -116,5 +119,45 @@ describe('fights and traits', () => {
     let s = table({ field: [['SOFA-001'], []], memories: [[], ['SOFA-001', 'SOFA-002', 'SOFA-003']] })
     s = reduce(s, { t: 'endTurn' })
     expect(s.players[1].thoughts).toHaveLength(2)
+  })
+})
+
+describe('Values and Heart (v2.1)', () => {
+  it('deals 5 face-down Values from Memories', () => {
+    const s = newGame({ seed: 5, decks: [Array(20).fill('SOFA-001'), Array(20).fill('SOFA-024')], names: ['A', 'B'] })
+    for (const pl of s.players) {
+      expect(pl.essenceStack.map((e) => e.up)).toEqual([false, false, false, false, false])
+      expect(pl.memories).toHaveLength(10)
+    }
+  })
+
+  it('a hit reveals one; a revealed card swaps with a card in Thoughts once per turn', () => {
+    let s = table({ field: [['SOFA-001'], []], hand: [['SOFA-002'], ['SOFA-003', 'SOFA-004']] })
+    s.players[0].stories[0].startedTurn = 0
+    s = reduce(s, { t: 'toFight' })
+    s = reduce(s, { t: 'attack', storyId: s.players[0].stories[0].id, target: 'player' })
+    const pl = s.players[1]
+    expect([pl.essence, pl.lost]).toEqual([4, 1])
+    const revealed = pl.essenceStack.find((e) => e.up)!.c
+    s = reduce(reduce(s, { t: 'endTurn' }), { t: 'endTurn' })
+    s = reduce(s, { t: 'endTurn' }) // B's turn
+    expect(s.active).toBe(1)
+    const hand = inHand(s, 'SOFA-003', 1)
+    s = reduce(s, { t: 'swapEssence', essenceUid: revealed.uid, handUid: hand.uid })
+    expect(s.players[1].thoughts.some((c) => c.uid === revealed.uid)).toBe(true)
+    expect(s.players[1].essenceStack.find((e) => e.up)!.c.uid).toBe(hand.uid)
+    const again = s.players[1].essenceStack.find((e) => e.up)!.c.uid
+    expect(reduce(s, { t: 'swapEssence', essenceUid: again, handUid: inHand(s, 'SOFA-004', 1).uid })).toBe(s)
+  })
+
+  it('with all 5 Values revealed, the next hit reaches the Heart', () => {
+    let s = table({ field: [['SOFA-001'], []] })
+    for (const e of s.players[1].essenceStack) e.up = true
+    s.players[1].essence = 0
+    s.players[1].lost = 5
+    s.players[0].stories[0].startedTurn = 0
+    s = reduce(s, { t: 'toFight' })
+    s = reduce(s, { t: 'attack', storyId: s.players[0].stories[0].id, target: 'player' })
+    expect(s.winner).toBe(0)
   })
 })

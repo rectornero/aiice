@@ -6,7 +6,7 @@
 import { CARD_BY_ID, type Card } from './cards'
 import { whoMustAct, type BotPolicy } from './driver'
 import {
-  attackTargets, canActivate, canAttack, canChant, canContinue, canStart, flipsFor, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
+  attackTargets, canActivate, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
   type Action, type CardInst, type FightMode, type GameState, type PendingChoice, type PlayerIdx, type Story,
 } from './engine'
 
@@ -95,7 +95,7 @@ function storyValue(s: GameState, p: PlayerIdx, st: Story) {
   const traits = traitsOf(s, c.uid)
   if (traits.includes(UNDELETABLE)) return 0
   // death-defiant (and Kurogane's own text): its owner loses 1 Essence instead, the game's real currency
-  if (traits.includes('death-defiant') || /instead lose \d+ Essence/i.test(cardOf(c).text)) return s.players[p].essence <= 1 ? 100 : 12 / s.players[p].essence + 2
+  if (traits.includes('death-defiant') || /instead lose \d+ (Essence|Value)/i.test(cardOf(c).text)) return s.players[p].essence <= (RULES.heart ? 0 : 1) ? 100 : 12 / (s.players[p].essence + (RULES.heart ? 1 : 0)) + 2
   let v = 1 + strength(s, p, c) + 0.5 * cardOf(c).chapter
   // "When deleted: delete all Entities on your field" (Prima)
   if (/When deleted: delete all/i.test(cardOf(c).text)) v += 2 * (s.players[p].stories.length - 1) + 2
@@ -289,6 +289,20 @@ function goodChants(s: GameState, p: PlayerIdx): Action[] {
   return out.sort((x, y) => y.v - x.v).map((x) => x.a)
 }
 
+/** Swap a revealed Essence card into Thoughts when it is clearly better than our worst card in hand. */
+function goodSwap(s: GameState, p: PlayerIdx): Action[] {
+  const pl = s.players[p]
+  if (!pl.thoughts.length) return []
+  const worst = [...pl.thoughts].sort((a, b) => handValue(s, p, a) - handValue(s, p, b))[0]
+  let best: { uid: string; v: number } | null = null
+  for (const e of pl.essenceStack) {
+    if (canSwapEssence(s, p, e.c.uid, worst.uid)) continue
+    const v = handValue(s, p, e.c)
+    if (!best || v > best.v) best = { uid: e.c.uid, v }
+  }
+  return best && best.v > handValue(s, p, worst) + 1 ? [{ t: 'swapEssence', essenceUid: best.uid, handUid: worst.uid }] : []
+}
+
 function bestContinue(s: GameState, p: PlayerIdx): Action[] {
   const pl = s.players[p]
   const avg = avgStars(s, p)
@@ -359,6 +373,7 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
   const actives = s.players[p].stories.map((st) => topOf(st).uid).filter((uid) => !canActivate(s, uid))
   const oneTurn = (uid: string) => /\[1 turn\]|until the end of (the|this) turn/i.test(cardOf(topOf(storyOf(s, uid)!.st)).text)
   if (s.phase === 'main') {
+    yield* goodSwap(s, p)
     yield* bestContinue(s, p)
     yield* bestStarts(s, p)
     for (const uid of actives) if (!oneTurn(uid) && activationHelps(s, p, uid)) yield { t: 'activate', uid }

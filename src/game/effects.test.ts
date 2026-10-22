@@ -19,6 +19,9 @@ function table(o: { field?: Pair<(string | string[])[]>; hand?: Pair<string[]>; 
     pl.stories = (o.field?.[p] ?? []).map((x) => ({ id: `st${n++}`, cards: [x].flat().map(inst), startedTurn: 0, movedTurn: 0, attackedTurn: 0 }))
     pl.thoughts = (o.hand?.[p] ?? []).map(inst)
     pl.memories = (o.memories?.[p] ?? []).map(inst)
+    pl.essenceStack = Array.from({ length: RULES.startingEssence }, () => ({ c: inst('SOFA-M03'), up: false }))
+    pl.essence = RULES.startingEssence
+    pl.lost = 0
   }
   return structuredClone(s)
 }
@@ -401,11 +404,11 @@ describe('Fate', () => {
     }
   })
 
-  it('death-defiant: losing the last Essence ends the game and the cascade', () => {
+  it('death-defiant: a hit on the Heart ends the game and the cascade', () => {
     let s = table({ field: [['SOFA-001'], ['SOFA-M03']] })
     s = give(s, on(s, 'SOFA-001'), 'death-defiant')
     s = structuredClone(s)
-    s.players[0].essence = 1
+    s.players[0].essence = 0
     s = fight(s, on(s, 'SOFA-M03'), on(s, 'SOFA-001'))
     expect(s.winner).toBe(1)
     expect(s.choices).toHaveLength(0)

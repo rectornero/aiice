@@ -64,7 +64,7 @@ describe('bot', () => {
         expect(checked).toBe(r.actions)
         expect(r.turns).toBeLessThanOrEqual(MAX_TURNS)
         if (r.winnerSeat === null) expect(r.turns).toBe(MAX_TURNS)
-        else expect(r.winnerEssence).toBeGreaterThan(0)
+        else expect(r.winnerEssence).toBeGreaterThanOrEqual(0) // the winner can be down to their Heart
       }
     })
 })

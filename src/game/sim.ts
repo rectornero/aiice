@@ -123,7 +123,7 @@ export function formatReport(st: SimStats, deckNames: [string, string], levels: 
     `  draws          ${String(st.draws).padStart(5)}  ${pct(st.draws)}  (no winner after ${MAX_TURNS} turns)`,
     `  seat 0 / seat 1 wins: ${st.winsBySeat[0]} / ${st.winsBySeat[1]}`,
     `  first player wins ${pct(Math.round(st.firstPlayerWinRate * decided), decided)} of decided games`,
-    `  average length ${st.avgTurns.toFixed(1)} turns, winner keeps ${st.avgWinnerEssence.toFixed(2)} Essence on average`,
+    `  average length ${st.avgTurns.toFixed(1)} turns, winner keeps ${st.avgWinnerEssence.toFixed(2)} Values on average`,
     `  cards played (entered the field), per game:`,
     ...Object.entries(st.played)
       .sort((a, b) => b[1] - a[1])

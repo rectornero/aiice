@@ -40,6 +40,12 @@ export const RULES = {
   emptyBoardDrawsTwo: true,
   /** V2 candidate: when an Entity loses a fight, its owner loses 1 Essence (whether or not it's deleted). */
   fightLossCostsEssence: false,
+  /** V2.1 (Nero, 2026-10-22): Essence is a stack of face-down cards from your Memories. Losing 1 Essence reveals one;
+   *  once per turn you may swap a revealed Essence card with a card in your Thoughts. */
+  essenceCards: true,
+  /** V2.1 (Nero, 2026-10-22): "5 Values and one Heart". Essence is now called Values; with no face-down Value left,
+   *  the next hit reaches the Heart and ends the game. Off: you lose when the last Value is lost. */
+  heart: true,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -91,8 +97,14 @@ export interface Story {
 
 export interface PlayerState {
   name: string
+  /** face-down Essence left (with essenceCards: hidden cards in essenceStack) */
   essence: number
+  /** lost Essence (with essenceCards: revealed cards in essenceStack) */
   lost: number
+  /** V2.1: the Essence stack, bottom → top; up = revealed */
+  essenceStack: { c: CardInst; up: boolean }[]
+  /** last turn this player swapped a revealed Essence card */
+  swappedTurn: number
   memories: CardInst[]
   thoughts: CardInst[]
   stories: Story[]
@@ -185,6 +197,7 @@ export type Action =
   | { t: 'gainEssence'; player: PlayerIdx }
   | { t: 'disperse'; player: PlayerIdx }
   | { t: 'concede'; player: PlayerIdx }
+  | { t: 'swapEssence'; essenceUid: string; handUid: string }
 
 // ---------- helpers ----------
 
@@ -350,15 +363,68 @@ function drawOne(s: GameState, p: PlayerIdx) {
   pl.thoughts.push(c)
 }
 
+/** Recounts essence / lost from the Essence stack (essenceCards only). */
+function countEssence(pl: PlayerState) {
+  if (!RULES.essenceCards) return
+  pl.essence = pl.essenceStack.filter((e) => !e.up).length
+  pl.lost = pl.essenceStack.filter((e) => e.up).length
+}
+
+/** Spends 1 lost Essence ("disperse"): with essenceCards the oldest revealed Essence card is forgotten. */
+export function disperseOne(s: GameState, p: PlayerIdx): boolean {
+  const pl = s.players[p]
+  if (pl.lost <= 0) return false
+  const i = RULES.essenceCards ? pl.essenceStack.findIndex((e) => e.up) : -1
+  if (i >= 0) {
+    pl.discard.push(pl.essenceStack[i].c)
+    pl.essenceStack.splice(i, 1)
+    countEssence(pl)
+  } else pl.lost -= 1
+  return true
+}
+
+/** Why this revealed Essence card can't be swapped with this card in Thoughts now, or null if it can. */
+export function canSwapEssence(s: GameState, p: PlayerIdx, essenceUid: string, handUid?: string): string | null {
+  const pl = s.players[p]
+  if (!RULES.essenceCards) return 'Values are not cards in this mode.'
+  const e = pl.essenceStack.find((x) => x.c.uid === essenceUid)
+  if (!e || !e.up) return 'Only revealed Values can be swapped.'
+  if (s.active !== p || s.phase !== 'main') return 'Swap in your Main step.'
+  if (pl.swappedTurn === s.turn) return 'One swap per turn.'
+  if (handUid !== undefined && !pl.thoughts.some((c) => c.uid === handUid)) return 'Pick a card in your Thoughts.'
+  if (!pl.thoughts.length) return 'Your Thoughts are empty.'
+  return null
+}
+
+/** The player takes n hits: each reveals a face-down Value; a hit with none left reaches the Heart and ends the game. */
 export function loseEssence(s: GameState, p: PlayerIdx, n = 1) {
   const pl = s.players[p]
-  const lost = Math.min(n, pl.essence)
-  pl.essence -= lost
-  pl.lost += lost
-  if (pl.essence <= 0 && s.winner === null) {
-    s.winner = other(p)
-    log(s, `${pl.name} has no Essence left. ${s.players[other(p)].name} wins!`)
+  for (let i = 0; i < n && s.winner === null; i++) {
+    if (pl.essence <= 0) {
+      if (RULES.heart) heartHit(s, p)
+      break
+    }
+    const hidden = pl.essenceStack.filter((x) => !x.up)
+    if (RULES.essenceCards && hidden.length === pl.essence) {
+      const e = hidden[hidden.length - 1]
+      e.up = true
+      log(s, `${pl.name} reveals a Value: ${cardName(card(e.c))}.`)
+      countEssence(pl)
+    } else {
+      // counts only (no Value cards, or the counts were adjusted by hand)
+      pl.essence -= 1
+      pl.lost += 1
+    }
+    if (!RULES.heart && pl.essence <= 0) heartHit(s, p)
   }
+}
+
+function heartHit(s: GameState, p: PlayerIdx) {
+  if (s.winner !== null) return
+  s.winner = other(p)
+  log(s, RULES.heart
+    ? `${s.players[p].name}'s Heart is reached: ${s.players[other(p)].name} wins!`
+    : `${s.players[p].name} has no Values left. ${s.players[other(p)].name} wins!`)
 }
 
 /** Raw delete of a Story's top Entity: no protection, replacement or trigger (see effects.ts destroy). */
@@ -391,6 +457,8 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
       name: opts.names[i],
       essence: RULES.startingEssence,
       lost: 0,
+      essenceStack: [],
+      swappedTurn: 0,
       memories: [],
       thoughts: [],
       stories: [],
@@ -410,6 +478,10 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     const pl = s.players[p]
     pl.memories = opts.decks[p].map((cardId) => ({ uid: `c${s.nextUid++}`, cardId }))
     shuffle(s, pl.memories)
+    if (RULES.essenceCards) {
+      pl.essenceStack = pl.memories.splice(0, RULES.startingEssence).map((c) => ({ c, up: false }))
+      countEssence(pl)
+    }
     for (let i = 0; i < RULES.openingHand; i++) drawOne(s, p)
   }
   s.active = rand(s) < 0.5 ? 0 : 1
@@ -512,7 +584,7 @@ function step(s: GameState, a: Action): boolean {
         // HOUSE RULE (playtest-01): a direct attack is only possible when the opponent imagines no Entity.
         if (s.players[foe].stories.length > 0) return false
         story.attackedTurn = s.turn
-        log(s, `${cardName(card(atk))} attacks ${s.players[foe].name} directly: they lose 1 Essence.`)
+        log(s, `${cardName(card(atk))} attacks ${s.players[foe].name} directly: “I Dream your Value!”`)
         loseEssence(s, foe)
         return true
       }
@@ -627,22 +699,37 @@ function step(s: GameState, a: Action): boolean {
       removeTop(s, a.player, a.storyId)
       return true
     case 'loseEssence':
-      log(s, `${s.players[a.player].name} loses 1 Essence.`)
+      log(s, `${s.players[a.player].name} takes a hit.`)
       loseEssence(s, a.player)
       return true
     case 'gainEssence': {
       const p = s.players[a.player]
       if (p.lost <= 0) return false
-      p.lost -= 1
-      p.essence += 1
-      log(s, `${p.name} regains 1 Essence.`)
+      const up = RULES.essenceCards ? p.essenceStack.find((e) => e.up) : undefined
+      if (up) {
+        up.up = false
+        countEssence(p)
+      } else {
+        p.lost -= 1
+        p.essence += 1
+      }
+      log(s, `${p.name} turns 1 Value face down again.`)
       return true
     }
     case 'disperse': {
       const p = s.players[a.player]
-      if (p.lost <= 0) return false
-      p.lost -= 1
-      log(s, `${p.name} disperses 1 lost Essence.`)
+      if (!disperseOne(s, a.player)) return false
+      log(s, `${p.name} disperses 1 revealed Value.`)
+      return true
+    }
+    case 'swapEssence': {
+      if (canSwapEssence(s, me, a.essenceUid, a.handUid)) return false
+      const e = pl.essenceStack.find((x) => x.c.uid === a.essenceUid)!
+      const h = pl.thoughts.find((c) => c.uid === a.handUid)!
+      pl.thoughts = [...pl.thoughts.filter((c) => c !== h), e.c]
+      log(s, `${pl.name} swaps ${cardName(card(h))} from their Thoughts with the revealed Value ${cardName(card(e.c))}.`)
+      e.c = h
+      pl.swappedTurn = s.turn
       return true
     }
     case 'concede':
@@ -687,7 +774,7 @@ function resolveFight(s: GameState) {
   const deleted = loser ? destroy(s, loser.card.uid) : false
   if (!loser) log(s, 'Tie: both Entities survive.')
   if (loser && RULES.fightLossCostsEssence && s.winner === null) {
-    log(s, `${s.players[loser.player].name} lost the fight: they lose 1 Essence.`)
+    log(s, `${s.players[loser.player].name} lost the fight: they take a hit.`)
     loseEssence(s, loser.player)
   }
   afterFight(s, [

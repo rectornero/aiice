@@ -87,7 +87,7 @@ export const CARDS: Card[] = [
   { id: 'SOFA-F02', icon: 'magic-hat', name: 'Familiar Hiroshi', title: 'Enigmatic Cat Magician', type: 'Entity', domain: 'Fate', chapter: 1, fate: 1, sure: 1, stars: 2,
     text: 'While imagined: choose a Fate Chapter 2 Entity you remember; continue this Story with it and give it fate-favored (if it has it, +1 instead).', flavor: 'May the starlit road open to you, master... and bring you to me.' },
   { id: 'SOFA-027', icon: 'devil-mask', name: 'Kurogane Ikazuchi', title: 'Devil’s Adept', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd4 2', fate: 1, sure: 2, stars: 1, rarity: 'Rare',
-    text: 'While imagined: if this Entity is about to be deleted, you instead lose 1 Essence. During a fight: if this Entity deletes an Entity, disperse 1 lost Essence: it gets +1.',
+    text: 'While imagined: if this Entity is about to be deleted, you instead lose 1 Value. During a fight: if this Entity deletes an Entity, disperse 1 revealed Value: it gets +1.',
     flavor: 'Death? I am no stranger to it. I witness it every time one like you falls.', image: kurogane },
   { id: 'SOFA-028', icon: 'polar-star', name: 'Hikari Mizuki', title: 'Blessed by the Star', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd4 2', fate: 1, sure: 1, stars: 2, rarity: 'Rare',
     text: 'When instanced: all your Entities can’t be deleted until the end of your next turn. While imagined: all your Entities get fate-favored (if they have it, +2 instead).',
@@ -117,7 +117,7 @@ export const CARDS: Card[] = [
   { id: 'SI-C06', name: 'Twist of Fate', type: 'Word', domain: 'Fate', chapter: 0, echo: 2, fate: 0, sure: 0, stars: 1, icon: 'spiral-bloom',
     text: '[B]: fate-favored → 1 your Entity. ill-fated → ~1 opponent’s Entity.', flavor: 'A thread pulled here... is a knot tied there.' },
   { id: 'SI-C07', name: 'Starfall', type: 'Word', domain: 'Fate', chapter: 0, echo: 3, fate: 0, sure: 0, stars: 0, icon: 'falling-star',
-    text: '[B]: flip 3. Your opponent loses 1 Essence for every 2 stars you flipped.', flavor: 'Make a wish. Not every star falls kindly.' },
+    text: '[B]: flip 3. Your opponent loses 1 Value for every 2 stars you flipped.', flavor: 'Make a wish. Not every star falls kindly.' },
 
   // ---- Relic ----
   { id: 'SOFA-R01', icon: 'drum-kit', name: 'Aqualith', title: 'Harmonic Drums', type: 'Relic', domain: 'Music', chapter: 0, fate: 0, sure: 0, stars: 1,
@@ -138,10 +138,11 @@ export const STARTER_DECKS: Record<string, { name: string; cards: string[] }> = 
   music: {
     name: 'Music',
     cards: [
-      ...repeat('SOFA-001', 2), ...repeat('SOFA-002', 2), ...repeat('SOFA-003', 1), ...repeat('SOFA-004', 1), ...repeat('SOFA-005', 1),
+      // V2.1: 3 Tuning Hum and 3 Aqua Beat (for Lullaby and Blazing Melody): with 5 cards in the Essence stack Music needs its core more often
+      ...repeat('SOFA-001', 3), ...repeat('SOFA-002', 2), ...repeat('SOFA-003', 1), ...repeat('SOFA-004', 1),
       ...repeat('SOFA-M01', 1), ...repeat('SOFA-M02', 1), ...repeat('SOFA-M03', 2), ...repeat('SOFA-M04', 1),
       ...repeat('SOFA-096', 1), ...repeat('SOFA-M05', 1),
-      ...repeat('SI-C01', 2), ...repeat('SI-C02', 1), ...repeat('SI-C03', 2), ...repeat('SI-C04', 1),
+      ...repeat('SI-C01', 3), ...repeat('SI-C03', 2), ...repeat('SI-C04', 1),
     ],
   },
   fate: {

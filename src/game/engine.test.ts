@@ -7,7 +7,16 @@ const start = (seed = 1) =>
 
 function putInHand(s: GameState, cardId: string) {
   const p = s.players[s.active]
-  const i = p.memories.findIndex((c) => c.cardId === cardId)
+  const held = p.thoughts.find((c) => c.cardId === cardId)
+  if (held) return held.uid
+  let i = p.memories.findIndex((c) => c.cardId === cardId)
+  if (i < 0) {
+    // the card went into the Essence stack: trade it for the top of Memories
+    const e = p.essenceStack.find((x) => x.c.cardId === cardId)!
+    p.memories.unshift(e.c)
+    e.c = p.memories.splice(1, 1)[0]
+    i = 0
+  }
   const [c] = p.memories.splice(i, 1)
   p.thoughts.push(c)
   return c.uid
@@ -17,7 +26,8 @@ describe('engine', () => {
   it('deals opening hands', () => {
     const s = start()
     expect(s.players[0].thoughts).toHaveLength(5)
-    expect(s.players[1].memories).toHaveLength(15)
+    expect(s.players[1].memories).toHaveLength(10) // 20 − 5 Essence − 5 in Thoughts
+    expect(s.players[1].essenceStack.filter((e) => !e.up)).toHaveLength(5)
   })
 
   it('is deterministic from the seed', () => {
@@ -57,17 +67,20 @@ describe('engine', () => {
     expect(s.players[1].discard).toHaveLength(1)
   })
 
-  it('direct attacks cost Essence and can win the game', () => {
+  it('direct attacks reveal Values, and the 6th reaches the Heart', () => {
     let s = start()
     s.active = 0
     const a = putInHand(s, 'SOFA-001')
     s = reduce(s, { t: 'imagineNew', uid: a })
-    for (let i = 0; i < 5; i++) {
+    const hit = () => {
       s = reduce(reduce(s, { t: 'endTurn' }), { t: 'endTurn' })
       s = reduce(s, { t: 'toFight' })
       s = reduce(s, { t: 'attack', storyId: s.players[0].stories[0].id, target: 'player' })
     }
+    for (let i = 0; i < 5; i++) hit()
     expect(s.players[1].essence).toBe(0)
+    expect(s.winner).toBeNull()
+    hit()
     expect(s.winner).toBe(0)
   })
 })

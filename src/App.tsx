@@ -118,13 +118,13 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
       <details className="panel rules">
         <summary>How this table plays (rules used)</summary>
         <ul>
-          <li>5 Essence each, 5 cards in Thoughts, draw 1 per turn (the first player skips turn 1's draw). If you imagine no Entity at the start of your turn, draw 2.</li>
+          <li>5 Values and 1 Heart each, 5 cards in Thoughts, draw 1 per turn (the first player skips turn 1's draw). If you imagine no Entity at the start of your turn, draw 2.</li>
           <li><b>Each player has two rows of 3 slots:</b> Stories (Entities) and your <b>Chant</b>, a row of green <b>Word</b> cards.</li>
           <li><b>Main:</b> imagine a Chapter 1 Entity to start a Story (max 3), or put the next Chapter on top of a Story. Each Story moves once per turn.</li>
           <li>Add one <b>Word</b> per turn to your Chant. Its top-right number is its <b>Echo</b>: Echo 2 needs 1 Word already in your Chant, Echo 3 needs 2. When the 3rd Word lands, the Chant is complete and all its Words are forgotten.</li>
           <li><b>Fight:</b> each imagined Entity attacks once, not on the turn its Story started. Both players choose: <b>sure hit</b>, or <b>flip</b> Fate cards from Memories and count ★. Higher total wins; the loser is deleted. Ties: nothing happens.</li>
           <li><b>Traits:</b> brave +1 when attacking · charming +1 when defending · defender must be attacked first · pacifist can't attack · fate-favored flips 1 more · ill-fated flips 1 fewer and wears off at the end of its owner's turn.</li>
-          <li>If the opponent imagines no Entity, attack them directly: they lose 1 Essence. 0 Essence = you lose.</li>
+          <li><b>Values</b>: a stack of 5 face-down cards from your Memories, with your <b>Heart</b> behind them. If the opponent imagines no Entity, attack them directly (“I Dream your Value!”): they reveal 1 Value. Once per turn you can swap a revealed Value with a card in your Thoughts. A hit when no Value is face down reaches the Heart: that player loses.</li>
           <li>Card art is a placeholder from game-icons.net (CC BY 3.0, credits in the repo). Fate, sure hit and ★ values are still provisional.</li>
         </ul>
       </details>

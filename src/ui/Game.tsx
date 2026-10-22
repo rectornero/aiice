@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cardName } from '../game/cards'
 import { whoMustAct, type MatchSetup } from '../game/driver'
 import {
-  attackTargets, bonusDetails, canActivate, canAttack, canChant, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, RULES, sureOf, top, traitDetails, traitsOf,
+  attackTargets, bonusDetails, canActivate, canSwapEssence, canAttack, canChant, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, RULES, sureOf, top, traitDetails, traitsOf,
   type Action, type CardInst, type GameState, type PlayerIdx, type Story, type TraitInfo,
 } from '../game/engine'
 import { CardDetails, CardText, CardView } from './CardView'
@@ -24,7 +24,7 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
   const { s, mode, act, undo, canUndo, reveal, dismissReveal, netStatus, botThinking } = useMatch(setup)
   const [sel, setSel] = useState<Sel>(null)
   const [shownTo, setShownTo] = useState<PlayerIdx | null>(null)
-  const [modal, setModal] = useState<null | { kind: 'memories' | 'discard'; player: PlayerIdx }>(null)
+  const [modal, setModal] = useState<null | { kind: 'memories' | 'discard' | 'essence'; player: PlayerIdx }>(null)
   const [picks, setPicks] = useState<string[]>([])
   const [choiceHidden, setChoiceHidden] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
@@ -228,6 +228,7 @@ function hintFor(s: GameState, me: PlayerIdx, mode: MatchMode, botThinking: bool
     if (chapters.length) items.push(`Continue a Story with a Chapter ${chapters.join(' or ')}`)
     if (pl.thoughts.some((c) => canStart(s, me, c))) items.push('Imagine a Chapter 1 Entity to start a Story')
     if (pl.thoughts.some((c) => !canChant(s, me, c))) items.push('Add a green Word to your Chant')
+    if (pl.essenceStack.some((e) => !canSwapEssence(s, me, e.c.uid))) items.push('Swap a revealed Value')
     const fightState = { ...s, phase: 'fight' as const }
     if (pl.stories.some((st) => !canAttack(fightState, st))) items.push('Go to Fight')
     if (!items.length) items.push('End your turn')
@@ -250,7 +251,7 @@ function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile, clickChant }:
   s: GameState; p: PlayerIdx; mine: boolean; sel: Sel
   glow: (st: Story, owner: PlayerIdx) => Glow
   clickStory: (st: Story, owner: PlayerIdx) => void
-  openPile: (k: 'memories' | 'discard') => void
+  openPile: (k: 'memories' | 'discard' | 'essence') => void
   clickChant: (uid: string) => void
 }) {
   const pl = s.players[p]
@@ -274,10 +275,11 @@ function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile, clickChant }:
     <section className={`area ${mine ? 'mine' : 'theirs'} ${s.active === p ? 'active' : ''}`}>
       <div className="area-head">
         <div className="pname">{pl.name}{s.active === p && ' ●'}</div>
-        <div className="essence" title={`Essence ${pl.essence}`}>
+        <button type="button" className="essence" title={`Values: ${pl.essence} face down, ${pl.lost} revealed, then the Heart. Tap to see them.`} onClick={() => openPile('essence')}>
           {Array.from({ length: pl.essence }, (_, i) => <span key={i} className="ess on">◆</span>)}
-          {Array.from({ length: pl.lost }, (_, i) => <span key={`l${i}`} className="ess off" title="lost Essence">◇</span>)}
-        </div>
+          {Array.from({ length: pl.lost }, (_, i) => <span key={`l${i}`} className="ess off" title="revealed Value">◇</span>)}
+          <span className="ess heart" title="Heart">♥</span>
+        </button>
         <div className="pile-links">
           {!mine && <span className="muted small">✋{pl.thoughts.length}</span>}
           <button className="btn ghost sm" disabled={!mine} onClick={() => openPile('memories')} title="Memories (deck)">🂠 {pl.memories.length}</button>
@@ -364,6 +366,14 @@ function HandActions({ s, me, c, canPlay, act, done }: {
         <div className="muted">Needs a Story with a Chapter {card(c).chapter - 1} on top that hasn't moved this turn.</div>
       )}
       {!myTurn && <div className="muted">You can imagine cards in your Main step.</div>}
+      {myTurn && s.players[me].essenceStack.filter((e) => e.up).map((e) => {
+        const why = canSwapEssence(s, me, e.c.uid, c.uid)
+        return why ? null : (
+          <button key={e.c.uid} className="btn" onClick={() => { act({ t: 'swapEssence', essenceUid: e.c.uid, handUid: c.uid }); done() }}>
+            ⇄ Swap with revealed Value: {card(e.c).name}
+          </button>
+        )
+      })}
       <details className="adjust">
         <summary>Adjust</summary>
         <button className="btn ghost sm" onClick={() => { act({ t: 'forget', player: me, uid: c.uid }); done() }}>Forget (discard)</button>
@@ -438,10 +448,37 @@ function StoryActions({ s, me, owner, story, canPlay, act, done }: {
   )
 }
 
-function PileModal({ s, me, kind, player, act, close }: {
-  s: GameState; me: PlayerIdx; kind: 'memories' | 'discard'; player: PlayerIdx; act: (a: Action) => void; close: () => void
+/** The Values stack: face-down cards are hidden, revealed ones are public. Swap from a card in your Thoughts. */
+function EssenceModal({ s, me, player, act, close }: {
+  s: GameState; me: PlayerIdx; player: PlayerIdx; act: (a: Action) => void; close: () => void
 }) {
   const pl = s.players[player]
+  return (
+    <div className="overlay" onClick={close}>
+      <div className="dialog wide" onClick={(e) => e.stopPropagation()}>
+        <div className="row between gap">
+          <h2>{pl.name}'s Values</h2>
+          <button className="btn ghost" onClick={close}>Close</button>
+        </div>
+        <p className="muted small">
+          {pl.essence} face down, {pl.lost} revealed. Each hit reveals one; the hit after the last Value reaches the Heart, and {pl.name} loses.
+          {player === me && ' Once per turn you can swap a revealed card with a card in your Thoughts: select the card in your Thoughts.'}
+        </p>
+        <div className="grid">
+          {pl.essenceStack.map((e) => e.up
+            ? <CardView key={e.c.uid} card={card(e.c)} size="sm" />
+            : <div key={e.c.uid} className="card sm back"><div className="back-logo">AI·ICE</div><div className="back-label">Value</div></div>)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PileModal({ s, me, kind, player, act, close }: {
+  s: GameState; me: PlayerIdx; kind: 'memories' | 'discard' | 'essence'; player: PlayerIdx; act: (a: Action) => void; close: () => void
+}) {
+  const pl = s.players[player]
+  if (kind === 'essence') return <EssenceModal s={s} me={me} player={player} act={act} close={close} />
   const cards = kind === 'memories'
     ? [...pl.memories].sort((a, b) => card(a).chapter - card(b).chapter || card(a).name.localeCompare(card(b).name))
     : pl.discard
@@ -458,9 +495,9 @@ function PileModal({ s, me, kind, player, act, close }: {
             <summary>Adjust (fix effects by hand)</summary>
             <div className="row gap wrap">
               <button className="btn sm" onClick={() => act({ t: 'draw', player })}>Draw 1</button>
-              <button className="btn sm" onClick={() => act({ t: 'loseEssence', player })}>Lose 1 Essence</button>
-              <button className="btn sm" disabled={pl.lost === 0} onClick={() => act({ t: 'disperse', player })}>Disperse 1 lost Essence</button>
-              <button className="btn sm" disabled={pl.lost === 0} onClick={() => act({ t: 'gainEssence', player })}>Regain 1 Essence</button>
+              <button className="btn sm" onClick={() => act({ t: 'loseEssence', player })}>Take 1 hit</button>
+              <button className="btn sm" disabled={pl.lost === 0} onClick={() => act({ t: 'disperse', player })}>Disperse 1 revealed Value</button>
+              <button className="btn sm" disabled={pl.lost === 0} onClick={() => act({ t: 'gainEssence', player })}>Turn 1 Value face down</button>
               <button className="btn sm danger" onClick={() => { act({ t: 'concede', player }); close() }}>Concede</button>
             </div>
             <p className="muted small"><CardText text="Remember puts a card from Memories into your Thoughts, for [B] effects like “Remember 1 Entity [Chapter: 2]”." /></p>

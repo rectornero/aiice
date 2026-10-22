@@ -316,3 +316,7 @@ input, select { background: var(--bg2); color: var(--text); border: 1px solid va
   .row3 { max-width: 360px; }
   .row3.chants { height: 58px; }
 }
+
+button.essence { background: none; border: 0; padding: 2px 4px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
+button.essence:hover, button.essence:focus-visible { background: rgba(79, 179, 255, .12); outline: none; }
+.ess.heart { color: #ff6b8b; margin-left: 2px; }

@@ -8,7 +8,7 @@
 
 import { cardName, type Card } from './cards'
 import {
-  card, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, shuffle, top, UNDELETABLE,
+  card, disperseOne, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, shuffle, top, UNDELETABLE,
   type CardInst, type GameState, type PendingChoice, type PlayerIdx, type Trait, type TraitInfo,
 } from './engine'
 
@@ -169,7 +169,7 @@ export function destroy(s: GameState, uid: string): boolean {
   if (EFFECTS[c.cardId]?.insteadOfDeletion?.(s, c, p)) return false
   // HOUSE RULE (RULES.deathDefiant): death-defiant = "when it would be deleted, its owner loses 1 Essence instead".
   if (RULES.deathDefiant && hasTrait(s, uid, 'death-defiant')) {
-    log(s, `${nm(c)} is death-defiant: ${pl.name} loses 1 Essence instead.`)
+    log(s, `${nm(c)} is death-defiant: ${pl.name} loses 1 Value instead.`)
     loseEssence(s, p)
     return false
   }
@@ -365,17 +365,16 @@ export const EFFECTS: Record<string, Effect> = {
   // During a fight: if it deletes an Entity, disperse 1 lost Essence: it gets +1.
   'SOFA-027': {
     insteadOfDeletion: (s, _self, owner) => {
-      log(s, `Kurogane Ikazuchi isn't deleted: ${s.players[owner].name} loses 1 Essence instead.`)
+      log(s, `Kurogane Ikazuchi isn't deleted: ${s.players[owner].name} loses 1 Value instead.`)
       loseEssence(s, owner)
       return true
     },
     afterFight: (s, self, owner, f) => {
       const pl = s.players[owner]
       // HOUSE RULE: the disperse is automatic whenever its owner has lost Essence.
-      if (!f.deletedFoe || ownerOf(s, self.uid) === null || pl.lost <= 0) return
-      pl.lost -= 1
+      if (!f.deletedFoe || ownerOf(s, self.uid) === null || !disperseOne(s, owner)) return
       addBonus(s, self.uid, 1)
-      log(s, `Kurogane Ikazuchi deleted an Entity: ${pl.name} disperses 1 lost Essence, it gets +1.`)
+      log(s, `Kurogane Ikazuchi deleted an Entity: ${pl.name} disperses 1 revealed Value, it gets +1.`)
     },
   },
   // Hikari Mizuki — When instanced: your Entities can't be deleted until the end of your next turn.
@@ -486,7 +485,7 @@ export const EFFECTS: Record<string, Effect> = {
       log(s, `Starfall: ${pl.name} flips ${flipped.map((c) => `${card(c).name} (${card(c).stars}★)`).join(', ') || 'nothing'}: ${stars} star${stars === 1 ? '' : 's'}.`)
       const n = Math.floor(stars / 2)
       if (n) {
-        log(s, `Starfall: ${s.players[other(owner)].name} loses ${n} Essence.`)
+        log(s, `Starfall: ${s.players[other(owner)].name} loses ${n} Value${n === 1 ? '' : 's'}.`)
         loseEssence(s, other(owner), n)
       } else log(s, 'Starfall: not enough stars.')
     },

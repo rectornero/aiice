@@ -13,7 +13,8 @@
 | **defender** | If the opponent imagines a defender, your attacks must target a defender. | Classic, readable. |
 | **ill-fated fades** | ill-fated wears off at the end of its owner's turn. | Breaks the Raiden → Noboru two-turn board wipe; the combo now needs both cards in the same turn. |
 | **Comeback draw** | If you imagine no Entity at the start of your turn, you draw 2 instead of 1. | Softens the "empty board = lost game" snowball and evens out going first. |
-| Unchanged | 5 Essence, 5-card hand, draw 1, Chapter 1 starts a Story, sure hit or flip, ties do nothing, direct attack only into an empty board. | |
+| **Values and Heart** (v2.1, Nero 2026-10-22) | Essence is now **5 Values and 1 Heart**: at setup, 5 cards from your Memories go face down as your Values. Each hit ("I Dream your Value!") reveals one. Once per turn, in your Main step, you can swap a revealed Value with a card in your Thoughts. A hit when no Value is face down reaches the Heart: you lose. | Essence becomes cards (no extra pieces), and taking hits gives you options. |
+| Unchanged | 5-card hand, draw 1, Chapter 1 starts a Story, sure hit or flip, ties do nothing, direct attack only into an empty board. | |
 
 Card types stay three: Entity, Word, Relic (Nero, 2026-10-22: Chant is the chain, Word is the spell). Dreaming Violinist and Kazuki remember a Word of the given Echo.
 
@@ -45,3 +46,6 @@ Notes from the variant runs: removing Fate's Words made Fate win 83% (its first 
 - Whether Words should also be playable outside the Chant (for example as instant spells).
 - Real names, art and stats for the Words; Nature has no cards yet.
 - The winner still keeps about 4.2 of 5 Essence on average: fights decide games more than Essence races.
+
+## v2.1 simulation (Values and Heart)
+Value cards come out of the 20-card deck, which cost Music a few percent; its starter deck now runs 3 Tuning Hum and 3 Aqua Beat (instead of Lullaby and Blazing Melody). 1000 games: Music 45%, Fate 52%, draws 3%, first player 54%.

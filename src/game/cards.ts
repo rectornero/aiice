@@ -81,11 +81,11 @@ export const CARDS: Card[] = [
 
   // ---- Fate ----
   { id: 'SOFA-024', icon: 'raven', name: 'Familiar Raiden', title: 'Thundering Tower Raven', type: 'Entity', domain: 'Fate', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 2, rarity: 'Common',
-    text: '[B]: ill-fated → ~2 opponent’s Entities', flavor: 'There’s no blade that cuts through misfortune.', image: raiden },
+    text: '[B]: star-crossed → ~2 opponent’s Entities', flavor: 'There’s no blade that cuts through misfortune.', image: raiden },
   { id: 'SOFA-025', heart: true, icon: 'lion', name: 'Familiar Takeshi', title: 'Majestic Emperor Lion', type: 'Entity', domain: 'Fate', chapter: 1, die: 'd4 3', fate: 1, sure: 2, stars: 1, rarity: 'Common',
     text: '[B]: fate-favored → 1 other Entity', flavor: 'Fate favors the brave! Rally with me!', image: takeshi },
   { id: 'SOFA-F01', icon: 'hound', name: 'Familiar Kuro', title: 'Infernal Devil Hound', type: 'Entity', domain: 'Fate', chapter: 1, fate: 1, sure: 1, stars: 1,
-    text: 'After a fight: give the Entity this card attacked ill-fated. If this Entity defeats an Entity, it gets +1.', flavor: 'Whether you win or lose, hell will find you soon...' },
+    text: 'After a fight: give the Entity this card attacked star-crossed. If this Entity defeats an Entity, it gets +1.', flavor: 'Whether you win or lose, hell will find you soon...' },
   { id: 'SOFA-F02', icon: 'magic-hat', name: 'Familiar Hiroshi', title: 'Enigmatic Cat Magician', type: 'Entity', domain: 'Fate', chapter: 1, fate: 1, sure: 1, stars: 2,
     text: 'While imagined: choose a Fate Chapter 2 Entity you remember; continue this Story with it and give it fate-favored (if it has it, +1 instead).', flavor: 'May the starlit road open to you, master... and bring you to me.' },
   { id: 'SOFA-027', icon: 'devil-mask', name: 'Kurogane Ikazuchi', title: 'Devil’s Adept', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd4 2', fate: 1, sure: 2, stars: 1, rarity: 'Rare',
@@ -95,7 +95,7 @@ export const CARDS: Card[] = [
     text: 'When instanced: all your Entities can’t be deleted until the end of your next turn. While imagined: all your Entities get fate-favored (if they have it, +2 instead).',
     flavor: 'May the Star bless this city... and our valiant warriors protect it.', image: hikari },
   { id: 'SOFA-029', heart: true, icon: 'samurai-helmet', name: 'Noboru Amano', title: 'Fallen Tower Samurai', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd6 4', fate: 2, sure: 2, stars: 0, rarity: 'Rare',
-    text: 'When instanced: give ill-fated to all opponent’s Entities; those that already have it are deleted instead. When deleted: one of your Entities gets fate-favored.',
+    text: 'When instanced: give star-crossed to all opponent’s Entities; those that already have it are deleted instead. When deleted: one of your Entities gets fate-favored.',
     flavor: 'The source of my power... will kill me, one day.', image: noboru },
   { id: 'SOFA-F03', icon: 'katana', name: 'Seiji Tenno', title: 'The Samurai Emperor', type: 'Entity', domain: 'Fate', chapter: 2, fate: 2, sure: 3, stars: 0,
     text: '(no ability)', flavor: 'It’s not about me... it’s about them. LET’S KEEP OUR HOME SAFE!' },
@@ -117,7 +117,7 @@ export const CARDS: Card[] = [
   { id: 'SI-C05', name: 'Read the Stars', type: 'Word', domain: 'Fate', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 2, icon: 'stars-stack',
     text: '[B]: look at the top 3 cards of your Memories; put any of them on the bottom. Then draw 1.', flavor: 'The sky remembers what we forget.' },
   { id: 'SI-C06', name: 'Twist of Fate', type: 'Word', domain: 'Fate', chapter: 0, echo: 2, fate: 0, sure: 0, stars: 1, icon: 'spiral-bloom',
-    text: '[B]: fate-favored → 1 your Entity. ill-fated → ~1 opponent’s Entity.', flavor: 'A thread pulled here... is a knot tied there.' },
+    text: '[B]: fate-favored → 1 your Entity. star-crossed → ~1 opponent’s Entity.', flavor: 'A thread pulled here... is a knot tied there.' },
   { id: 'SI-C07', name: 'Starfall', type: 'Word', domain: 'Fate', chapter: 0, echo: 3, fate: 0, sure: 0, stars: 0, icon: 'falling-star',
     text: '[B]: flip 3. Your opponent loses 1 Value for every 2 stars you flipped.', flavor: 'Make a wish. Not every star falls kindly.' },
 

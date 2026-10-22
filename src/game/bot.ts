@@ -141,7 +141,7 @@ function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: Play
 
 // ---------- choices ----------
 
-const HARMFUL_WORDS = /ill-fated|delet|doomed|pacifist|inoffensive|forget|discard|\blose|can.?t|−\d|-\d/i
+const HARMFUL_WORDS = /star-crossed|delet|doomed|pacifist|inoffensive|forget|discard|\blose|can.?t|−\d|-\d/i
 /** Whether a choice hurts what it targets. The prompt starts with the card's name ("Familiar Raiden: ..."), skip it. */
 const harmfulChoice = (ch: PendingChoice) => HARMFUL_WORDS.test(ch.prompt.slice(ch.prompt.indexOf(':') + 1))
 

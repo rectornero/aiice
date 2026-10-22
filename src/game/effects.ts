@@ -374,24 +374,24 @@ export const EFFECTS: Record<string, Effect> = {
       for (const e of field) if (has(e, 'resonant')) e.bonus += 2
     },
   },
-  // Familiar Raiden — [B]: ill-fated → ~2 opponent's Entities
+  // Familiar Raiden — [B]: star-crossed → ~2 opponent's Entities
   'SOFA-024': {
     onEnter: (s, self, owner) =>
-      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 2, true, 'ill-fated', {}, ["opponent's Entity", "opponent's Entities"]),
+      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 2, true, 'star-crossed', {}, ["opponent's Entity", "opponent's Entities"]),
   },
   // Familiar Takeshi — [B]: fate-favored → 1 other Entity
   'SOFA-025': {
     onEnter: (s, self, owner) =>
       traitTo(s, self, owner, imagined(s).filter((e) => e.c.uid !== self.uid).map((e) => e.c.uid), 1, false, 'fate-favored', {}, ['other Entity', 'other Entities']),
   },
-  // Familiar Kuro — After a fight: the Entity it attacked gets ill-fated. If it defeats an Entity, it gets +1.
+  // Familiar Kuro — After a fight: the Entity it attacked gets star-crossed. If it defeats an Entity, it gets +1.
   'SOFA-F01': {
-    // HOUSE RULE: only when Kuro attacked; the ill-fated lands even if Kuro lost; "defeats" = wins the fight.
+    // HOUSE RULE: only when Kuro attacked; the star-crossed lands even if Kuro lost; "defeats" = wins the fight.
     afterFight: (s, self, _owner, f) => {
       if (f.role !== 'attacker') return
       if (ownerOf(s, f.foe.uid) !== null) {
-        giveTrait(s, f.foe.uid, 'ill-fated')
-        log(s, `Familiar Kuro: ${nm(f.foe)} gets ill-fated.`)
+        giveTrait(s, f.foe.uid, 'star-crossed')
+        log(s, `Familiar Kuro: ${nm(f.foe)} gets star-crossed.`)
       }
       if (f.won && ownerOf(s, self.uid) !== null) {
         addBonus(s, self.uid, 1)
@@ -443,18 +443,18 @@ export const EFFECTS: Record<string, Effect> = {
       }
     },
   },
-  // Noboru Amano — When instanced: opponent's Entities get ill-fated; those that have it are deleted instead.
+  // Noboru Amano — When instanced: opponent's Entities get star-crossed; those that have it are deleted instead.
   // When deleted: one of your Entities gets fate-favored.
   'SOFA-029': {
     onEnter: (s, _self, owner) => {
-      log(s, 'Noboru Amano: all opponent’s Entities get ill-fated; those that already have it are deleted.')
-      const foes = imagined(s, other(owner)).map((e) => ({ c: e.c, had: hasTrait(s, e.c.uid, 'ill-fated') }))
+      log(s, 'Noboru Amano: all opponent’s Entities get star-crossed; those that already have it are deleted.')
+      const foes = imagined(s, other(owner)).map((e) => ({ c: e.c, had: hasTrait(s, e.c.uid, 'star-crossed') }))
       for (const { c, had } of foes) {
         if (ownerOf(s, c.uid) === null) continue
         if (had) destroy(s, c.uid)
         else {
-          giveTrait(s, c.uid, 'ill-fated')
-          log(s, `${nm(c)} gets ill-fated.`)
+          giveTrait(s, c.uid, 'star-crossed')
+          log(s, `${nm(c)} gets star-crossed.`)
         }
       }
     },
@@ -518,11 +518,11 @@ export const EFFECTS: Record<string, Effect> = {
       'Read the Stars: your Memories are empty.')
     },
   },
-  // Twist of Fate — fate-favored → 1 your Entity. ill-fated → ~1 opponent's Entity.
+  // Twist of Fate — fate-favored → 1 your Entity. star-crossed → ~1 opponent's Entity.
   'SI-C06': {
     onEnter: (s, self, owner) => {
       traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fate-favored', {}, ['of your Entities', 'of your Entities'])
-      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, true, 'ill-fated', {}, ["opponent's Entity", "opponent's Entities"])
+      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, true, 'star-crossed', {}, ["opponent's Entity", "opponent's Entities"])
     },
   },
   // Starfall — flip 3. Your opponent loses 1 Essence for every 2 stars you flipped.

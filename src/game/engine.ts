@@ -32,8 +32,8 @@ export const RULES = {
   braveCharming: true,
   /** V2: if the opponent imagines a defender, attacks must target a defender. */
   defenderGuards: true,
-  /** V2: ill-fated wears off at the end of its owner's turn (it lasts through one of their turns). */
-  illFatedFades: true,
+  /** V2: star-crossed wears off at the end of its owner's turn (it lasts through one of their turns). */
+  starCrossedFades: true,
   /** V2.6 (Nero, 2026-10-22): the second player draws 6 at setup (fixes the first-player edge). */
   secondPlayerExtraCard: true,
   /** V2 (comeback): a player who imagines no Entity at the start of their turn draws 2 instead of 1. */
@@ -349,7 +349,7 @@ function topCard(s: GameState, uid: string): CardInst | null {
 export function flipsFor(s: GameState, c: CardInst) {
   let n = card(c).fate
   if (hasTrait(s, c.uid, 'fate-favored')) n += 1
-  if (hasTrait(s, c.uid, 'ill-fated')) n -= 1
+  if (hasTrait(s, c.uid, 'star-crossed')) n -= 1
   return Math.max(0, n)
 }
 
@@ -738,12 +738,12 @@ function step(s: GameState, a: Action): boolean {
         m.turnBonus = 0
         m.traits = m.traits.filter((t) => !t.oneTurn && !(t.untilTurn !== undefined && t.untilTurn <= s.turn))
       }
-      if (RULES.illFatedFades) {
+      if (RULES.starCrossedFades) {
         for (const st of pl.stories) {
           const m = s.mods[top(st).uid]
-          if (m?.traits.some((t) => t.name === 'ill-fated')) {
-            m.traits = m.traits.filter((t) => t.name !== 'ill-fated')
-            log(s, `${card(top(st)).name} is no longer ill-fated.`)
+          if (m?.traits.some((t) => t.name === 'star-crossed')) {
+            m.traits = m.traits.filter((t) => t.name !== 'star-crossed')
+            log(s, `${card(top(st)).name} is no longer star-crossed.`)
           }
         }
       }

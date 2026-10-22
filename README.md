@@ -17,3 +17,11 @@ npm test             # engine tests
 npm run build        # production build to dist/ (Netlify)
 npm run build:single # one self-contained HTML file in dist-single/
 ```
+
+## Posting updates to Artache
+
+Progress is posted to the [Artache](https://artache.netlify.app) Updates feed under the project `rectornero/aiice`.
+
+- Claude Code sessions post meaningful results themselves (rules in `CLAUDE.md`), through the `artache` MCP connector.
+- Production deploys post a `release` automatically via `netlify/functions/deploy-succeeded.mts`. Set `ARTACHE_TOKEN` in the Netlify site's environment variables to turn it on; without it the function does nothing.
+- From a terminal or CI: `ARTACHE_TOKEN=art_… node scripts/artache.mjs post "Title" --body "..." --kind release --url https://...` (also `work <key> --status published`, `recent`, and `--dry-run`).

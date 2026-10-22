@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { cardName } from '../game/cards'
 import {
-  canActivate, canWhisper, card, findStory, flipsFor, hasHeartMark, RULES, powerBonus, roleBonus, sureOf, top,
-  type Action, type FightResult, type FightSide, type GameState, type PlayerIdx,
+  bonusParts, canActivate, canWhisper, card, findStory, fightBonus, flipsFor, hasEclipseMark, hasHeartMark, hasShieldMark, hasSurgeMark, RULES, sureOf, top,
+  type Action, type BonusPart, type FightResult, type FightSide, type GameState, type PlayerIdx,
 } from '../game/engine'
 import { CardView, Stars } from './CardView'
+import { fightRecap } from './recap'
 import { loadAutoAdvance } from './settings'
 
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`)
+const partsText = (parts: BonusPart[]) => parts.map((p) => `${signed(p.n)} ${p.label}`).join(', ')
 
 /** Sure hit or flip, for the player who must choose now. The other side's choice stays hidden. */
 export function FightChoice({ s, player, act }: { s: GameState; player: PlayerIdx; act: (a: Action) => void }) {
@@ -15,7 +17,8 @@ export function FightChoice({ s, player, act }: { s: GameState; player: PlayerId
   const atk = top(findStory(s, f.attacker.storyId)!.story)
   const def = top(findStory(s, f.defender.storyId)!.story)
   const mine = player === f.attacker.player ? atk : def
-  const bonus = powerBonus(s, mine.uid) + roleBonus(s, mine.uid, player === f.attacker.player ? 'attacker' : 'defender')
+  const role = player === f.attacker.player ? 'attacker' : 'defender'
+  const bonus = fightBonus(s, mine.uid, role)
   return (
     <div className="overlay">
       <div className="dialog">
@@ -25,7 +28,14 @@ export function FightChoice({ s, player, act }: { s: GameState; player: PlayerId
           <span>vs</span>
           <CardView card={card(def)} size="sm" />
         </div>
-        <p>{s.players[player].name}, choose for <b>{cardName(card(mine))}</b>{bonus ? ` (${signed(bonus)})` : ''}:</p>
+        <div className="fight-bonuses">
+          <BonusLine s={s} uid={atk.uid} role="attacker" />
+          <BonusLine s={s} uid={def.uid} role="defender" />
+        </div>
+        {(f.events ?? []).length > 0 && (
+          <ul className="fight-events">{f.events!.map((e, i) => <li key={i}>{e}</li>)}</ul>
+        )}
+        <p>{s.players[player].name}, choose for <b>{cardName(card(mine))}</b>:</p>
         <div className="row gap wrap center">
           <button className="btn primary big" onClick={() => act({ t: 'chooseMode', player, mode: 'sure' })}>
             Sure hit: {sureOf(s, mine) + bonus}
@@ -37,6 +47,17 @@ export function FightChoice({ s, player, act }: { s: GameState; player: PlayerId
         <FightExtras s={s} player={player} act={act} />
         {player === f.attacker.player && <button className="btn ghost" onClick={() => act({ t: 'cancelAttack' })}>Cancel attack</button>}
       </div>
+    </div>
+  )
+}
+
+/** "Volt Strummer attacks: +3 Volt Strummer, +1 brave" (or "no bonus"), shown to both players before they choose. */
+function BonusLine({ s, uid, role }: { s: GameState; uid: string; role: 'attacker' | 'defender' }) {
+  const parts = bonusParts(s, uid, role)
+  const c = top(findStory(s, role === 'attacker' ? s.pendingFight!.attacker.storyId : s.pendingFight!.defender.storyId)!.story)
+  return (
+    <div className="small">
+      <b>{card(c).name}</b> {role === 'attacker' ? 'attacks' : 'defends'}: {parts.length ? partsText(parts) : <span className="muted">no bonus</span>}
     </div>
   )
 }
@@ -77,7 +98,7 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
     if (shown >= last) {
       // the result waits for Continue unless auto-advance is on
       if (!auto) return
-      const id = setTimeout(onClose, 2500)
+      const id = setTimeout(onClose, 6000) // time to read the recap
       return () => clearTimeout(id)
     }
     const id = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 300 : STEP_MS)
@@ -105,10 +126,43 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
                 <span>{card(r.attacker.card).name}'s Memories touch {s.players[r.defender.player].name}!</span>
               </div>
             )}
+            <FightRecap s={s} r={r} />
             <button type="button" className="btn primary" autoFocus onClick={(e) => { e.stopPropagation(); onClose() }}>Continue</button>
           </>
         ) : <div className="muted small">Tap to skip</div>}
       </div>
+    </div>
+  )
+}
+
+/** Both sides' numbers with every bonus named, the result, and what the fight caused. */
+function FightRecap({ s, r }: { s: GameState; r: FightResult }) {
+  const { sides, result, damage } = fightRecap(s, r)
+  return (
+    <div className="recap">
+      <table>
+        <thead>
+          <tr><th />{sides.map((x) => <th key={x.role} className={x.won ? 'won' : ''}>{x.name}<div className="muted small">{x.role} · {x.player}</div></th>)}</tr>
+        </thead>
+        <tbody>
+          <tr><th>Roll</th>{sides.map((x) => <td key={x.role}>{x.roll}</td>)}</tr>
+          <tr><th>Base</th>{sides.map((x) => <td key={x.role}>{x.base}</td>)}</tr>
+          <tr>
+            <th>Bonus</th>
+            {sides.map((x) => (
+              <td key={x.role}>{x.parts.length ? x.parts.map((p, i) => <div key={i}>{signed(p.n)} {p.label}</div>) : <span className="muted">none</span>}</td>
+            ))}
+          </tr>
+          <tr className="recap-total"><th>Total</th>{sides.map((x) => <td key={x.role}>{x.total}{x.won ? ' ✓' : ''}</td>)}</tr>
+        </tbody>
+      </table>
+      <div className="recap-result">{result}</div>
+      {damage.length > 0 && (
+        <>
+          <div className="recap-head">Damage report</div>
+          <ul className="recap-damage">{damage.map((d, i) => <li key={i}><span className="recap-icon">{d.icon}</span>{d.text}</li>)}</ul>
+        </>
+      )}
     </div>
   )
 }
@@ -120,13 +174,16 @@ function RevealSide({ s, x, role, upTo, offset, done, won }: {
     <div className={`fside ${done ? (won ? 'won' : 'lost') : ''}`}>
       <div className="muted">{s.players[x.player].name} · {role}</div>
       <CardView card={card(x.card)} size="sm" />
-      <div>{x.mode === 'sure' ? 'Sure hit' : `Flips ${x.flips}`}</div>
+      <div>{x.mode === 'sure' ? 'Sure hit' : `Flips ${x.flips}${x.surged ? ` ⚡+${x.surged}` : ''}`}</div>
       {x.mode === 'flip' && (
         <div className="flipped">
           {x.flipped.map((c, i) => (offset + i < upTo ? (
             <div key={c.uid} className={`flipcard ${hasHeartMark(c) ? 'heart' : ''}`} title={cardName(card(c)) + (hasHeartMark(c) ? ' · Heart mark' : '')}>
               <CardView card={card(c)} size="xs" />
               {hasHeartMark(c) && <span className="flip-heart" aria-label="Heart mark">♥</span>}
+              {hasEclipseMark(c) && <span className="flip-eclipse" aria-label="Eclipse mark">☾</span>}
+              {hasSurgeMark(c) && <span className="flip-surge" aria-label="Surge mark">⚡</span>}
+              {hasShieldMark(c) && <span className="flip-shield" aria-label="Shield mark">◈</span>}
               <Stars n={card(c).stars} />
             </div>
           ) : <div key={c.uid} className="flipcard pending"><div className="card xs back" /></div>))}

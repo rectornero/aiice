@@ -8,8 +8,8 @@
 
 import { cardName, type Card } from './cards'
 import {
-  card, drawOne, endFight, fighterOf, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, setValues, shuffle, top, UNDELETABLE,
-  type CardInst, type GameState, type PendingChoice, type PlayerIdx, type Story, type Trait, type TraitInfo,
+  addNote, card, drawOne, endFight, fighterOf, hasTrait, log, loseEssence, modsOf, other, ownerOf, removeTop, RULES, setValues, shuffle, top, UNDELETABLE,
+  type BonusPart, type CardInst, type GameState, type PendingChoice, type PlayerIdx, type Story, type Trait, type TraitInfo,
 } from './engine'
 
 /** An imagined Entity while the continuous layers are computed. */
@@ -20,6 +20,8 @@ export interface FieldEntity {
   traits: TraitInfo[]
   /** continuous bonus only */
   bonus: number
+  /** where the continuous bonus comes from (card names), for the UI */
+  from?: BonusPart[]
 }
 
 export interface FightInfo {
@@ -55,7 +57,7 @@ export interface Effect {
   onChantLanded?: (s: GameState, self: CardInst, owner: PlayerIdx, word: CardInst) => void
   /** Whisper Words: played from Thoughts during a fight (it's already in the Reverie) */
   onWhisper?: Hook
-  /** Words in a Chant: an Entity was read */
+  /** Words in a Chant: an Entity was told */
   onEntityRead?: Hook
   /** Relics: played onto a Story */
   onEquip?: (s: GameState, self: CardInst, owner: PlayerIdx, story: Story) => void
@@ -112,16 +114,25 @@ export function giveTrait(s: GameState, uid: string, name: string, dur: Dur = {}
   m.traits = [...m.traits.filter((x) => x.name !== name), t]
 }
 
-export function addBonus(s: GameState, uid: string, n: number, oneTurn = false) {
+export function addBonus(s: GameState, uid: string, n: number, oneTurn = false, label = 'Card effect') {
   const m = (s.mods[uid] = modsOf(s, uid))
   if (oneTurn) m.turnBonus += n
   else m.bonus += n
+  addNote(m, n, label, oneTurn ? 'turn' : 'game')
+}
+
+/** +N for the current fight only (Whisper Words, Terra Harmonia) */
+function addFightBonus(s: GameState, uid: string, n: number, label: string) {
+  const m = (s.mods[uid] = modsOf(s, uid))
+  m.fightBonus = (m.fightBonus ?? 0) + n
+  addNote(m, n, label, 'fight')
+  return m
 }
 
 /** "gets <trait> (if it has it, +n instead)" */
-function traitOrBonus(s: GameState, c: CardInst, trait: string, n: number) {
+function traitOrBonus(s: GameState, c: CardInst, trait: string, n: number, label = `already ${trait}`) {
   if (hasTrait(s, c.uid, trait)) {
-    addBonus(s, c.uid, n)
+    addBonus(s, c.uid, n, false, label)
     log(s, `${nm(c)} already has ${trait}: +${n} instead.`)
   } else {
     giveTrait(s, c.uid, trait)
@@ -338,7 +349,7 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     const n = Number(ch.data?.n ?? 0)
     for (const uid of picks) {
       if (ownerOf(s, uid) === null) continue
-      addBonus(s, uid, n, ch.data?.oneTurn === true)
+      addBonus(s, uid, n, ch.data?.oneTurn === true, String(ch.data?.src ?? 'Card effect'))
       log(s, `${ch.data?.src}: ${nameOf(s, uid)} gets +${n}${ch.data?.oneTurn ? ' this turn' : ''}.`)
     }
   },
@@ -375,7 +386,7 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     if (card(c).chapter >= 2) pl.bigTurn = s.turn
     log(s, `${ch.data?.src}: ${pl.name} continues the Story with ${cardName(card(c))}.`)
     if (ch.data?.ryuji) {
-      traitOrBonus(s, c, 'fated', 1)
+      traitOrBonus(s, c, 'fated', 1, 'Familiar Ryuji')
       giveTrait(s, c.uid, 'inoffensive', { oneTurn: true })
       log(s, `${nm(c)} gets inoffensive this turn.`)
     }
@@ -393,8 +404,7 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     if (picks[0] === 'end') return fightEnds(s, 'Storm Dragon Roar')
     const uid = fighterOf(s, ch.player)
     if (!uid) return
-    const m = (s.mods[uid] = modsOf(s, uid))
-    m.fightBonus = (m.fightBonus ?? 0) + 3
+    const m = addFightBonus(s, uid, 3, 'Storm Dragon Roar')
     m.fightDraw = true
     log(s, `Storm Dragon Roar: ${nameOf(s, uid)} gets +3 for this fight (draw 1 if it wins).`)
   },
@@ -422,12 +432,20 @@ export function resolveChoice(s: GameState, ch: PendingChoice, picks: string[]) 
 /** Layered view of every imagined Entity: traits (stored + continuous) and continuous bonus. */
 export function computeField(s: GameState): Map<string, FieldEntity> {
   const field: FieldEntity[] = imagined(s).map(({ c, owner }) => ({ c, k: card(c), owner, traits: storedTraits(s, c.uid), bonus: 0 }))
+  // Notes which card each continuous bonus comes from: the bonus change across the field during that card's step.
+  const from = (label: string, step: () => void) => {
+    const before = field.map((e) => e.bonus)
+    step()
+    field.forEach((e, i) => {
+      if (e.bonus !== before[i]) (e.from ??= []).push({ n: e.bonus - before[i], label })
+    })
+  }
   for (const e of field) {
     const relic = s.players[e.owner].stories.find((st) => top(st).uid === e.c.uid)?.relic
-    if (relic) EFFECTS[relic.cardId]?.relicGrant?.(e)
+    if (relic) from(card(relic).name, () => EFFECTS[relic.cardId]?.relicGrant?.(e))
   }
-  for (const id of GRANT_ORDER) for (const e of field) if (e.k.id === id) EFFECTS[id].grant!(field, e)
-  for (const e of field) EFFECTS[e.k.id]?.boost?.(field, e)
+  for (const id of GRANT_ORDER) for (const e of field) if (e.k.id === id) from(e.k.name, () => EFFECTS[id].grant!(field, e))
+  for (const e of field) from(e.k.name, () => EFFECTS[e.k.id]?.boost?.(field, e))
   return new Map(field.map((e) => [e.c.uid, e]))
 }
 
@@ -508,8 +526,7 @@ export const EFFECTS: Record<string, Effect> = {
       return isMusicNow(s, c) ? null : 'Only when one of your Music Entities defends.'
     },
     onActivate: (s, self, owner) => onFighter(s, self, owner, (uid) => {
-      const m = (s.mods[uid] = modsOf(s, uid))
-      m.fightBonus = (m.fightBonus ?? 0) + 2
+      addFightBonus(s, uid, 2, 'Terra Harmonia')
       log(s, `Terra Harmonia: ${nameOf(s, uid)} gets +2 for this fight.`)
     }),
   },
@@ -521,7 +538,7 @@ export const EFFECTS: Record<string, Effect> = {
     },
   },
   // Aqua Serenade — Your Music Pianists gain brave and fated, and ignore inoffensive (not inoffensive: +1 instead).
-  // When read: your Music Entities get +1.
+  // When told: your Music Entities get +1.
   'SOFA-008': {
     grant: (field, self) => {
       for (const e of field.filter(mine(self))) {
@@ -534,7 +551,7 @@ export const EFFECTS: Record<string, Effect> = {
     },
     onDeleted: (s, _self, owner) => {
       log(s, 'Aqua Serenade: your Music Entities get +1.')
-      for (const e of imagined(s, owner)) if (isMusicNow(s, e.c)) addBonus(s, e.c.uid, 1)
+      for (const e of imagined(s, owner)) if (isMusicNow(s, e.c)) addBonus(s, e.c.uid, 1, false, 'Aqua Serenade')
     },
   },
   // Zephyr Melody — Forget 1 card. Remember 1 Music Word with Echo 1 and 1 with Echo 2.
@@ -603,7 +620,7 @@ export const EFFECTS: Record<string, Effect> = {
     // HOUSE RULE: she can start a new Story on a turn you've imagined a Chapter 2+ Entity (before or after her).
     startAnyway: (s, owner) => s.players[owner].bigTurn === s.turn,
     continueBlocked: () => 'Only in a new Story.',
-    // HOUSE RULE: "forgotten" = any Entity card going to the Reverie or turning face down (read); she goes through the
+    // HOUSE RULE: "forgotten" = any Entity card going to the Reverie or turning face down (told); she goes through the
     // normal reading path, so protection and timeless can save her.
     onOtherForgotten: (s, self) => {
       if (ownerOf(s, self.uid) === null) return
@@ -618,7 +635,7 @@ export const EFFECTS: Record<string, Effect> = {
   'SOFA-096': {
     onEnter: (s, _self, owner) => {
       log(s, 'Camelia Nightshade: your Music Entities get +3 this turn.')
-      for (const e of imagined(s, owner)) if (isMusicNow(s, e.c)) addBonus(s, e.c.uid, 3, true)
+      for (const e of imagined(s, owner)) if (isMusicNow(s, e.c)) addBonus(s, e.c.uid, 3, true, 'Camelia Nightshade')
     },
     grant: (field, self) => {
       for (const e of field.filter(mine(self))) if (isMusic(e)) grantTo(e, 'brave', 'charming', 'defender')
@@ -636,7 +653,7 @@ export const EFFECTS: Record<string, Effect> = {
         log(s, `Familiar Kuro: ${nm(f.foe)} gains starless.`)
       }
       if (f.won && ownerOf(s, self.uid) !== null) {
-        addBonus(s, self.uid, 1)
+        addBonus(s, self.uid, 1, false, 'Familiar Kuro won')
         log(s, 'Familiar Kuro wins: it gets +1.')
       }
     },
@@ -671,24 +688,24 @@ export const EFFECTS: Record<string, Effect> = {
       forgetCards(s, self, owner, 1)
     },
   },
-  // Kurogane Ikazuchi — When it would be read, reveal 1 of your Values instead. When it reads an Entity in a fight: it gets +1.
+  // Kurogane Ikazuchi — When it would be told, reveal 1 of your Values instead. When an Entity it fights is told: it gets +1.
   'SOFA-027': {
     insteadOfDeletion: (s, _self, owner) => {
-      log(s, `Kurogane Ikazuchi isn't read: ${s.players[owner].name} reveals 1 Value instead.`)
+      log(s, `Kurogane Ikazuchi isn't told: ${s.players[owner].name} reveals 1 Value instead.`)
       loseEssence(s, owner, 1, 'Kurogane Ikazuchi', undefined, true)
       return true
     },
     afterFight: (s, self, _owner, f) => {
       if (!f.deletedFoe || ownerOf(s, self.uid) === null) return
-      addBonus(s, self.uid, 1)
-      log(s, 'Kurogane Ikazuchi read an Entity: it gets +1.')
+      addBonus(s, self.uid, 1, false, 'Kurogane’s foe was told')
+      log(s, 'Kurogane Ikazuchi’s foe is told: it gets +1.')
     },
   },
   // Hikari Mizuki — Your Entities can't be read until the end of your next turn. While imagined: your Entities gain fated (already fated: +2).
   'SOFA-028': {
     onEnter: (s, _self, owner) => {
       // HOUSE RULE: protects the Entities imagined now (UNDELETABLE trait), through global turn s.turn + 2.
-      log(s, 'Hikari Mizuki: your Entities can’t be read until the end of your next turn.')
+      log(s, 'Hikari Mizuki: your Entities can’t be told until the end of your next turn.')
       for (const e of imagined(s, owner)) giveTrait(s, e.c.uid, UNDELETABLE, { untilTurn: s.turn + 2 })
     },
     grant: (field, self) => {
@@ -722,13 +739,13 @@ export const EFFECTS: Record<string, Effect> = {
       for (const e of imagined(s, owner)) {
         const had = ['timeless', 'fated'].filter((t) => hasTrait(s, e.c.uid, t))
         for (const t of ['timeless', 'fated']) if (!had.includes(t)) giveTrait(s, e.c.uid, t)
-        if (had.length) addBonus(s, e.c.uid, 2 * had.length)
+        if (had.length) addBonus(s, e.c.uid, 2 * had.length, false, 'Prima')
       }
     },
     onDeleted: (s, _self, owner) => {
       // HOUSE RULE: reads the Entities imagined when it resolves (incl. the one revealed under Prima);
       // Entities revealed by these readings stay.
-      log(s, `Prima: read all of ${s.players[owner].name}'s Entities.`)
+      log(s, `Prima: all of ${s.players[owner].name}'s Entities are told.`)
       for (const e of imagined(s, owner)) destroy(s, e.c.uid, false)
     },
   },
@@ -738,8 +755,7 @@ export const EFFECTS: Record<string, Effect> = {
   'SOFA-041': {
     onEnter: (s, self, owner) => traitTo(s, self, owner, yours(s, owner), 1, false, 'brave', { oneTurn: true }, ['of your Entities', 'of your Entities']),
     onWhisper: (s, self, owner) => onFighter(s, self, owner, (uid) => {
-      const m = (s.mods[uid] = modsOf(s, uid))
-      m.fightBonus = (m.fightBonus ?? 0) + 2
+      addFightBonus(s, uid, 2, 'Rhapsody of Courage')
       log(s, `Rhapsody of Courage: ${nameOf(s, uid)} gets +2 for this fight.`)
     }),
   },
@@ -775,12 +791,12 @@ export const EFFECTS: Record<string, Effect> = {
     onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Chapter 1 Entity', entityOf(['Fate'], 1), 'familiar'),
     onEcho: (s, _self, owner) => drawOne(s, owner),
   },
-  // Crimson Vengeance — 1 Entity gains brave. When an Entity is read: 1 Entity gets +2 this turn. Echo: forget 1 card, draw 1.
+  // Crimson Vengeance — 1 Entity gains brave. When an Entity is told: 1 Entity gets +2 this turn. Echo: forget 1 card, draw 1.
   'SOFA-047': {
     onEnter: (s, self, owner) => traitTo(s, self, owner, yours(s, owner), 1, false, 'brave', {}, ['of your Entities', 'of your Entities']),
-    // HOUSE RULE: while it sits in your Chant, any Entity being read triggers it; +2 goes to one of yours.
+    // HOUSE RULE: while it sits in your Chant, any Entity being told triggers it; +2 goes to one of yours.
     onEntityRead: (s, self, owner) => ask(s, { player: owner, sourceUid: self.uid, zone: 'field', options: yours(s, owner), min: 1, max: 1, effect: 'bonus',
-      data: { src: 'Crimson Vengeance', n: 2, oneTurn: true }, prompt: 'Crimson Vengeance: an Entity was read. Choose 1 of your Entities: it gets +2 this turn.' }, ''),
+      data: { src: 'Crimson Vengeance', n: 2, oneTurn: true }, prompt: 'Crimson Vengeance: an Entity was told. Choose 1 of your Entities: it gets +2 this turn.' }, ''),
     onEcho: (s, self, owner) => forgetCards(s, self, owner, 1, 1),
   },
   // Clear Skies Knowledge — Draw 1, forget 1 card, and 1 Entity gains fated. Echo: do it again.
@@ -804,7 +820,7 @@ export const EFFECTS: Record<string, Effect> = {
       const traits = ['brave', 'fated', 'inspiring', 'timeless']
       const had = traits.filter((t) => hasTrait(s, uid, t))
       for (const t of traits) if (!had.includes(t)) giveTrait(s, uid, t, { oneTurn: true })
-      if (had.length) addBonus(s, uid, had.length, true)
+      if (had.length) addBonus(s, uid, had.length, true, 'The Way of the Sword')
       log(s, `The Way of the Sword: ${card(c).name} gains brave, fated, inspiring and timeless this turn${had.length ? ` (+${had.length} for those it had)` : ''}.`)
     }),
   },
@@ -826,7 +842,7 @@ export const EFFECTS: Record<string, Effect> = {
   },
   // Ruler's Insignia — Equip to a Story: its Entity gains inspiring.
   'SOFA-059': { relicGrant: (e) => grantTo(e, 'inspiring') },
-  // Devil Drinker — Reveal 1 of your Values. Equip to a Story: its Entity gains dual-striker; it is read at the end of your next turn. Playable from your Reverie.
+  // Devil Drinker — Reveal 1 of your Values. Equip to a Story: its Entity gains dual-striker; it is told at the end of your next turn. Playable from your Reverie.
   'SOFA-060': {
     onEquip: (s, _self, owner) => {
       log(s, `Devil Drinker: ${s.players[owner].name} reveals 1 Value.`)
@@ -836,7 +852,7 @@ export const EFFECTS: Record<string, Effect> = {
     relicEndOfTurn: (s, _self, _owner, story) => {
       if (story.relicTurn === undefined || story.relicTurn < 0 || s.turn < story.relicTurn + 2) return
       story.relicTurn = -1
-      log(s, `Devil Drinker: ${card(top(story)).name} is read at the end of the turn.`)
+      log(s, `Devil Drinker: ${card(top(story)).name} is told at the end of the turn.`)
       destroy(s, top(story).uid, false)
     },
   },

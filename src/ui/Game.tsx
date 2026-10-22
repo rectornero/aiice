@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cardName } from '../game/cards'
 import { whoMustAct, type MatchSetup } from '../game/driver'
 import {
-  attackTargets, bonusDetails, canActivate, canAttackPlayer, canEquip, canSwapEssence, canAttack, canChant, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, RULES, sureOf, top, traitDetails, traitsOf,
+  attackTargets, bonusParts, canActivate, canAttackPlayer, canEquip, canSwapEssence, canAttack, canChant, canContinue, canStart, card, findStory, flipsFor, other, powerBonus, RULES, sureOf, top, traitDetails, traitsOf,
   type Action, type CardInst, type GameState, type PlayerIdx, type Story, type TraitInfo,
 } from '../game/engine'
 import { CardDetails, CardText, CardView } from './CardView'
@@ -329,7 +329,7 @@ function StoryView({ s, st, glow, selected, onClick }: { s: GameState; st: Story
     <div className={`story ${glow ?? ''}`}>
       {(st.cards.length > 1 || !!st.lost?.length) && (
         <div className="story-depth">
-          {st.lost?.map((c) => <span key={c.uid} className="lost" title="read Chapter (face down)">✕</span>)}
+          {st.lost?.map((c) => <span key={c.uid} className="lost" title="told Chapter (face down)">✕</span>)}
           {st.cards.slice(0, -1).map((c) => <span key={c.uid}>Ch{card(c).chapter}</span>)}
         </div>
       )}
@@ -348,10 +348,25 @@ function StoryView({ s, st, glow, selected, onClick }: { s: GameState; st: Story
 }
 
 /** "+1 permanent, +2 this turn, +1 while imagined" */
+/** brave / charming / inoffensive only count in fights, so they are not in the bonus: say when they apply. */
+function roleHint(traits: string[]) {
+  if (!RULES.braveCharming) return ''
+  const hints: string[] = []
+  if (traits.includes('brave')) hints.push('+1 when attacking (brave)')
+  if (traits.includes('inoffensive')) hints.push('−1 when attacking (inoffensive)')
+  if (traits.includes('charming')) hints.push('+1 when defending (charming)')
+  return hints.join(', ')
+}
+
+/** " · defends at +2 (+1 Familiar Kuro won, +1 charming)" for attack buttons */
+function fightBonusText(s: GameState, uid: string, role: 'attacker' | 'defender') {
+  const parts = bonusParts(s, uid, role)
+  const n = parts.reduce((t, p) => t + p.n, 0)
+  return parts.length ? ` · ${role === 'defender' ? 'defends' : 'attacks'} at ${signed(n)} (${parts.map((p) => `${signed(p.n)} ${p.label}`).join(', ')})` : ''
+}
+
 function bonusText(s: GameState, uid: string) {
-  const b = bonusDetails(s, uid)
-  const parts: [number, string][] = [[b.permanent, 'permanent'], [b.turn, 'this turn'], [b.continuous, 'while imagined']]
-  return parts.filter(([n]) => n).map(([n, l]) => `${signed(n)} ${l}`).join(', ')
+  return bonusParts(s, uid).map((p) => `${signed(p.n)} ${p.label}`).join(', ')
 }
 
 function HandActions({ s, me, c, canPlay, act, done }: {
@@ -425,6 +440,7 @@ function StoryActions({ s, me, owner, story, canPlay, act, done }: {
         {story.cards.length > 1 && <span className="muted">Story of {story.cards.length}</span>}
       </div>
       {bonus !== 0 && <div className="muted small">Bonus: {bonusText(s, t.uid)}</div>}
+      {roleHint(traits) && <div className="muted small">In fights: {roleHint(traits)}</div>}
       {traitDetails(s, t.uid).length > 0 && <div className="row gap wrap"><TraitChips s={s} uid={t.uid} /></div>}
       {mine && (uses > 0 || noActivate === null) && (
         noActivate === null && canPlay ? (
@@ -446,7 +462,7 @@ function StoryActions({ s, me, owner, story, canPlay, act, done }: {
             )}
             {attackTargets(s, other(me)).map((st) => (
               <button key={st.id} className="btn danger" onClick={() => { act({ t: 'attack', storyId: story.id, target: st.id }); done() }}>
-                ⚔ {cardName(card(top(st)))}
+                ⚔ {cardName(card(top(st)))}{fightBonusText(s, top(st).uid, 'defender')}
               </button>
             ))}
           </div>

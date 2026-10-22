@@ -149,3 +149,14 @@ Each player sets aside a 10-card extra deck (30 cards in all). When Memories run
 | v2.7 | 44.5% | 55.5% | 0% | 47.4% | 14.3 | 49% of games | 0.02 | 2.3% of games |
 
 The old 2.8% draws were stalled games that hit the 80-turn cap. Now they end, mostly on the Heart, and turns drop because those 80-turn games are gone. Fate's rise to 55.5% probably comes from its placeholder extra deck.
+
+### Subconscious (Nero's name for the extra deck)
+
+A deck is 20 main cards plus a 10-card Subconscious, both fixed in the deck builder. The deck builder has a Subconscious section, and deck codes add it after a "/". Decks saved without one use a placeholder from their Domain. Values still come from the 20.
+
+Is 15 Memories enough? 1000 games each (the 25-card main deck adds 5 more non-♥ cards of the Domain):
+
+| main deck | Music | Fate | 1st player | turns | games where someone reaches the Subconscious | players reaching it | avg turn | games with Essence draws | lost by sharing the Heart |
+|---|---|---|---|---|---|---|---|---|---|
+| 20 + 10 | 44.5% | 55.5% | 47.4% | 14.3 | 49% | 38% | 15.3 | 1.5% | 2.3% |
+| 25 + 10 | 42.1% | 57.9% | 41.1% | 14.1 | 11% | 7% | 22.7 | 0.2% | 0.2% |

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { botPolicyFor } from './game/bot'
+import { extraDeckFor } from './game/cards'
 import { allDecks, validateDeck, type Deck } from './game/decks'
 import type { MatchSetup, SeatKind } from './game/driver'
 import { newGame } from './game/engine'
@@ -54,7 +55,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
   if (screen.kind === 'decks') return <DeckBuilder onBack={menu} />
 
   // Only decks that pass the deck rules can be played.
-  const decks = allDecks().filter((d) => validateDeck(d.cards).ok)
+  const decks = allDecks().filter((d) => validateDeck(d.cards, d.subconscious).ok)
   const deckOf = (id: string): Deck => decks.find((d) => d.id === id) ?? decks[0]
   if (screen.kind === 'online') {
     return <Lobby decks={decks} onBack={menu} onStart={(setup) => setScreen({ kind: 'game', setup, key: Date.now() })} />
@@ -64,6 +65,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
     const initial = newGame({
       seed: Math.floor(Math.random() * 2 ** 31),
       decks: [deckOf(deckIds[0]).cards, deckOf(deckIds[1]).cards],
+      extras: [extraDeckFor(deckOf(deckIds[0]).cards, deckOf(deckIds[0]).subconscious), extraDeckFor(deckOf(deckIds[1]).cards, deckOf(deckIds[1]).subconscious)],
       names: vsBot ? [names[0], `Bot (${level})`] : names,
     })
     const seats: [SeatKind, SeatKind] = vsBot ? ['local', 'bot'] : ['local', 'local']
@@ -125,7 +127,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
           <li><b>Fight:</b> each imagined Entity attacks once, not on the turn its Story started. Both players choose: <b>sure hit</b>, or <b>flip</b> Fate cards from Memories and count ★. Higher total wins; the loser is <b>read</b> (card texts still say “deleted”). Ties: nothing happens.</li>
           <li><b>Traits:</b> brave +1 when attacking · charming +1 when defending · defender must be attacked first · pacifist can't attack · fate-favored flips 1 more · ill-fated flips 1 fewer and wears off at the end of its owner's turn.</li>
           <li><b>Essence</b>: your stack of 5 face-down <b>Values</b> (cards from your Memories), with your <b>Heart</b> behind them. If the opponent imagines no Entity, attack them directly: “Camelia reaches the Essence!”, then “I Dream your Value!”, and they reveal 1 Value. Once per turn you can swap a revealed Value with a card in your Thoughts. A hit when no Value is face down reaches the Heart: “I Dream the Heart of your Music!”, and that player loses.</li>
-          <li><b>Running out</b> (v2.7): each player also has a 10-card extra deck set aside. When your Memories run out, it becomes your Memories. After that, each draw takes a face-down Value from your Essence into your Thoughts. With nothing left to draw, you share your Heart and lose.</li>
+          <li><b>Running out</b> (v2.7): each deck has a 10-card <b>Subconscious</b> set aside. When your Memories run out, it becomes your Memories. After that, each draw takes a face-down Value from your Essence into your Thoughts. With nothing left to draw, you share your Heart and lose.</li>
           <li><b>Read Chapters</b> (v2.2): a read Entity falls back a Chapter and stays face down under its Story (✕); a lone Chapter 1 is forgotten. Read the last face-up Entity of a Story with read Chapters and the Story is <b>laid bare</b>: it empties and reaches its owner's Essence (reveal 1 Value).</li>
           <li><b>Memories that touch</b> (v2.3): some cards carry a ♥ next to their Fate stars. If you attack, flip, and win with at least one ♥ card among your flips, you also reach the opponent's Essence (reveal 1 Value), once per fight. A sure hit flips nothing, so it can't touch.</li>
           <li>Card art is a placeholder from game-icons.net (CC BY 3.0, credits in the repo). Fate, sure hit and ★ values are still provisional.</li>

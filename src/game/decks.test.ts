@@ -125,3 +125,19 @@ describe('deck codes', () => {
     expect(parseDeckCode('   \n')).toEqual({ cards: [], unknown: [] })
   })
 })
+
+describe('Subconscious (V2.7)', () => {
+  it('round-trips through a deck code with a "/" part', () => {
+    const d = { cards: ['SOFA-001', 'SOFA-001'], subconscious: ['SOFA-004', 'SI-C02'] }
+    expect(deckCode(d)).toBe('SOFA-001x2 / SI-C02x1 SOFA-004x1')
+    expect(parseDeckCode(deckCode(d))).toEqual({ cards: ['SOFA-001', 'SOFA-001'], subconscious: ['SI-C02', 'SOFA-004'], unknown: [] })
+  })
+
+  it('needs exactly 10 cards and counts copies across both parts', () => {
+    const starter = allDecks()[0]
+    expect(validateDeck(starter.cards, starter.subconscious).ok).toBe(true)
+    expect(validateDeck(starter.cards, ['SOFA-004']).problems.join()).toMatch(/needs exactly 10/)
+    expect(validateDeck(starter.cards, Array(10).fill('SOFA-001')).problems.join()).toMatch(/across the deck and its Subconscious/)
+    expect(validateDeck(starter.cards, []).warnings.join()).toMatch(/No Subconscious yet/)
+  })
+})

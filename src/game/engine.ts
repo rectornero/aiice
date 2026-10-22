@@ -65,7 +65,7 @@ export const RULES = {
   changeForAttacker: false,
   /** where Change of Values comes from: completing your Chant (Nero's pick, rulebook §7) or a defender's ♥ win (old v2.4) */
   changeTrigger: 'chant' as 'defender' | 'chant',
-  /** V2.7 running out (Nero, rulebook §8b): a 10-card extra deck becomes Memories when they run out; after that each
+  /** V2.7 running out (Nero, rulebook §8b): the 10-card Subconscious (extra deck) becomes Memories when they run out; after that each
    *  draw takes a face-down Value into Thoughts; with nothing left to draw you share your Heart and lose. */
   runningOut: true,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
@@ -130,10 +130,12 @@ export interface PlayerState {
   /** last turn this player swapped a revealed Essence card */
   swappedTurn: number
   memories: CardInst[]
-  /** V2.7: the extra deck, set aside until Memories run out */
+  /** V2.7: the Subconscious (10-card extra deck), set aside until Memories run out */
   extra: CardInst[]
   /** V2.7: Values drawn from the Essence because nothing else was left */
   essenceDraws?: number
+  /** turn the Subconscious became Memories */
+  subconsciousTurn?: number
   thoughts: CardInst[]
   stories: Story[]
   /** V2: the Chant: Words in the order they were added */
@@ -396,13 +398,14 @@ export function log(s: GameState, msg: string) {
   s.log = [...s.log.slice(-199), msg]
 }
 
-/** V2.7: when Memories are empty, the extra deck becomes Memories. */
+/** V2.7: when Memories are empty, the Subconscious becomes Memories. */
 export function refillMemories(s: GameState, p: PlayerIdx) {
   const pl = s.players[p]
   if (pl.memories.length || !pl.extra?.length) return
   pl.memories = pl.extra
   pl.extra = []
-  log(s, `${pl.name}'s Memories run out: their extra deck becomes their Memories.`)
+  pl.subconsciousTurn = s.turn
+  log(s, `${pl.name}'s Memories run out: their Subconscious becomes their Memories.`)
 }
 
 export function drawOne(s: GameState, p: PlayerIdx, setup = false) {

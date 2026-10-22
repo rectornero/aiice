@@ -135,7 +135,7 @@ export function cardName(c: Card) {
 const repeat = (id: string, n: number) => Array.from({ length: n }, () => id)
 
 /** Starter decks for testing, 20 cards each. */
-export const STARTER_DECKS: Record<string, { name: string; cards: string[] }> = {
+export const STARTER_DECKS: Record<string, { name: string; cards: string[]; subconscious?: string[] }> = {
   // V2: 14 Entities + 6 Words
   music: {
     name: 'Music',
@@ -158,15 +158,18 @@ export const STARTER_DECKS: Record<string, { name: string; cards: string[] }> = 
   },
 }
 
-/** V2.7 (Nero, rulebook §8b): each player sets aside a 10-card extra deck. Its contents are still open; the
- *  placeholder is 10 more cards of the deck's main Domain without a Heart mark (so a deck keeps its 5 ♥). */
+/** V2.7 (Nero, rulebook §8b): a deck is 20 main cards + a 10-card Subconscious, fixed in the deck builder. Fallback
+ *  for decks without one (and the starters' placeholder): 10 more cards of the main Domain without a Heart mark. */
 export const EXTRA_DECKS: Record<string, string[]> = {
   Music: ['SOFA-004', 'SOFA-005', 'SOFA-005', 'SOFA-M01', 'SOFA-M02', 'SOFA-M04', 'SOFA-096', 'SI-C02', 'SI-C02', 'SI-C04'],
   Fate: ['SOFA-024', 'SOFA-F01', 'SOFA-F02', 'SOFA-F02', 'SOFA-027', 'SOFA-F03', 'SOFA-F04', 'SOFA-097', 'SI-C05', 'SI-C07'],
 }
-export function extraDeckFor(cards: string[]): string[] {
+export function extraDeckFor(cards: string[], subconscious?: string[]): string[] {
+  if (subconscious?.length) return subconscious
   const n: Record<string, number> = {}
   for (const id of cards) { const d = CARD_BY_ID[id]?.domain; if (d) n[d] = (n[d] ?? 0) + 1 }
   const main = Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0]
   return main ? EXTRA_DECKS[main] ?? [] : []
 }
+STARTER_DECKS.music.subconscious = EXTRA_DECKS.Music
+STARTER_DECKS.fate.subconscious = EXTRA_DECKS.Fate

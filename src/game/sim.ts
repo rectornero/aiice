@@ -3,7 +3,7 @@
 import { CARD_BY_ID, cardName } from './cards'
 import { botPolicyFor, type BotLevel } from './bot'
 import { whoMustAct } from './driver'
-import { newGame, reduce, RULES, type Action, type GameState, type PlayerIdx } from './engine'
+import { newGame, reduce, type Action, type GameState, type PlayerIdx } from './engine'
 
 export const MAX_TURNS = 80
 /** safety net: a game with more actions than this means a bot is looping */
@@ -22,6 +22,8 @@ export interface GameRecord {
   heart: boolean
   /** players whose extra deck became Memories (V2.7) */
   phase2: number
+  /** turns when a player's Subconscious became Memories */
+  subconsciousTurns: number[]
   /** Values drawn from the Essence (V2.7) */
   essenceDraws: number
   /** the game ended with a player sharing their Heart (nothing left to draw) */
@@ -97,7 +99,8 @@ export function playGame(opts: {
     winnerEssence: w === null ? 0 : s.players[w].essence,
     actions,
     heart: w !== null && !!s.lastHit?.heart && !s.log.some((l) => l.includes('shares their Heart')),
-    phase2: s.players.filter((pl) => RULES.runningOut && pl.extra.length === 0).length,
+    phase2: s.players.filter((pl) => pl.subconsciousTurn !== undefined).length,
+    subconsciousTurns: s.players.map((pl) => pl.subconsciousTurn).filter((t): t is number => t !== undefined),
     essenceDraws: s.players.reduce((n, pl) => n + (pl.essenceDraws ?? 0), 0),
     sharedHeart: s.log.some((l) => l.includes('shares their Heart')),
     laidBare,
@@ -127,6 +130,11 @@ export interface SimStats {
   /** share of games where at least one player reached their extra deck */
   phase2Rate: number
   essenceDrawsPerGame: number
+  /** share of player-games that reached the Subconscious, and the average turn it happened */
+  subconsciousPlayerRate: number
+  avgSubconsciousTurn: number
+  /** share of games with at least one Essence draw */
+  essenceDrawGameRate: number
   /** share of decided games lost by having nothing left to draw */
   sharedHeartRate: number
   /** Stories laid bare per game */
@@ -143,7 +151,7 @@ export interface SimStats {
 
 /** Plays `games` bot-vs-bot games. Seats alternate every game so both decks sit in both seats. */
 export function simulate(opts: { games: number; seed: number; decks: [string[], string[]]; levels?: [BotLevel, BotLevel]; maxTurns?: number }): SimStats {
-  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, phase2Rate: 0, essenceDrawsPerGame: 0, sharedHeartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, chantsPerGame: 0, attackFlipRate: 0, defenseFlipRate: 0, played: {} }
+  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, phase2Rate: 0, essenceDrawsPerGame: 0, subconsciousPlayerRate: 0, avgSubconsciousTurn: 0, essenceDrawGameRate: 0, sharedHeartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, chantsPerGame: 0, attackFlipRate: 0, defenseFlipRate: 0, played: {} }
   let turns = 0
   let essence = 0
   let firstWins = 0
@@ -151,6 +159,9 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   let ph2 = 0
   let edraws = 0
   let shared = 0
+  let subTurns = 0
+  let subN = 0
+  let edGames = 0
   let bare = 0
   let touch = 0
   let change = 0
@@ -172,6 +183,9 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
     if (r.heart) hearts++
     if (r.phase2) ph2++
     edraws += r.essenceDraws
+    if (r.essenceDraws) edGames++
+    subN += r.subconsciousTurns.length
+    subTurns += r.subconsciousTurns.reduce((a, b) => a + b, 0)
     if (r.sharedHeart) shared++
     for (const [id, n] of Object.entries(r.played)) st.played[id] = (st.played[id] ?? 0) + n
     if (r.winnerDeck === null || r.winnerSeat === null) {
@@ -191,6 +205,9 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   st.phase2Rate = opts.games ? ph2 / opts.games : 0
   st.essenceDrawsPerGame = opts.games ? edraws / opts.games : 0
   st.sharedHeartRate = decided ? shared / decided : 0
+  st.subconsciousPlayerRate = opts.games ? subN / (2 * opts.games) : 0
+  st.avgSubconsciousTurn = subN ? subTurns / subN : 0
+  st.essenceDrawGameRate = opts.games ? edGames / opts.games : 0
   st.laidBarePerGame = opts.games ? bare / opts.games : 0
   st.touchesPerGame = opts.games ? touch / opts.games : 0
   st.changesPerGame = opts.games ? change / opts.games : 0

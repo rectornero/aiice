@@ -10,6 +10,8 @@ export interface Deck {
   name: string
   /** card ids, one entry per copy */
   cards: string[]
+  /** V2.7: the 10-card Subconscious, set aside until Memories run out (missing on decks saved before it existed) */
+  subconscious?: string[]
   /** starter decks are built in and can't be changed or deleted */
   starter?: boolean
 }
@@ -21,6 +23,8 @@ export interface Deck {
 export const DECK_RULES = {
   /** a deck has exactly this many cards */
   size: 20,
+  /** V2.7: plus a Subconscious of exactly this many */
+  subconsciousSize: 10,
   /** at most this many copies of one card */
   maxCopies: 3,
   /** only these card types can be in a deck (Relics aren't playable yet). V2: Words are playable. */
@@ -32,12 +36,13 @@ export const DECK_RULES = {
 const STORAGE_KEY = 'ai-ice.decks.v1'
 
 export function starterDecks(): Deck[] {
-  return Object.entries(STARTER_DECKS).map(([id, d]) => ({ id, name: d.name, cards: [...d.cards], starter: true }))
+  return Object.entries(STARTER_DECKS).map(([id, d]) => ({ id, name: d.name, cards: [...d.cards], subconscious: d.subconscious && [...d.subconscious], starter: true }))
 }
 
 function isDeck(x: unknown): x is Deck {
   const d = x as Deck
-  return !!d && typeof d.id === 'string' && typeof d.name === 'string' && Array.isArray(d.cards) && d.cards.every((c) => typeof c === 'string')
+  const ids = (a: unknown) => Array.isArray(a) && a.every((c) => typeof c === 'string')
+  return !!d && typeof d.id === 'string' && typeof d.name === 'string' && ids(d.cards) && (d.subconscious === undefined || ids(d.subconscious))
 }
 
 /** Decks saved in this browser (empty if storage is unavailable or broken). */
@@ -46,7 +51,7 @@ export function savedDecks(): Deck[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const list: unknown = JSON.parse(raw)
-    return Array.isArray(list) ? list.filter(isDeck).map((d) => ({ id: d.id, name: d.name, cards: [...d.cards] })) : []
+    return Array.isArray(list) ? list.filter(isDeck).map((d) => ({ id: d.id, name: d.name, cards: [...d.cards], ...(d.subconscious ? { subconscious: [...d.subconscious] } : {}) })) : []
   } catch {
     return []
   }
@@ -54,7 +59,7 @@ export function savedDecks(): Deck[] {
 
 function writeSaved(decks: Deck[]): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(decks.map(({ id, name, cards }) => ({ id, name, cards }))))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(decks.map(({ id, name, cards, subconscious }) => ({ id, name, cards, subconscious }))))
     return true
   } catch {
     return false
@@ -75,7 +80,7 @@ export function saveDeck(deck: Deck): boolean {
   if (deck.starter || STARTER_DECKS[deck.id]) return false
   const list = savedDecks()
   const i = list.findIndex((d) => d.id === deck.id)
-  const clean = { id: deck.id, name: deck.name.trim() || 'Untitled deck', cards: [...deck.cards] }
+  const clean: Deck = { id: deck.id, name: deck.name.trim() || 'Untitled deck', cards: [...deck.cards], ...(deck.subconscious ? { subconscious: [...deck.subconscious] } : {}) }
   if (i >= 0) list[i] = clean
   else list.push(clean)
   return writeSaved(list)
@@ -131,10 +136,24 @@ export interface DeckCheck {
   warnings: string[]
 }
 
-export function validateDeck(cards: string[]): DeckCheck {
+export function validateDeck(cards: string[], subconscious?: string[]): DeckCheck {
   const problems: string[] = []
   const warnings: string[] = []
-  const { size, maxCopies, playableTypes, minChapter1 } = DECK_RULES
+  const { size, maxCopies, playableTypes, minChapter1, subconsciousSize } = DECK_RULES
+  const sub = subconscious ?? []
+  if (subconscious !== undefined) {
+    if (!sub.length) warnings.push(`No Subconscious yet: games use a placeholder of ${subconsciousSize} cards from the deck's Domain.`)
+    else if (sub.length !== subconsciousSize) problems.push(`The Subconscious has ${sub.length} card${sub.length === 1 ? '' : 's'}; it needs exactly ${subconsciousSize}.`)
+    for (const id of new Set(sub)) {
+      const c = CARD_BY_ID[id]
+      if (!c) problems.push(`Unknown card ${id} in the Subconscious.`)
+      else if (!playableTypes.includes(c.type)) problems.push(`${c.name} is a ${c.type}; only Entities and Words can be played for now.`)
+    }
+    for (const [id, n] of countCards([...cards, ...sub])) {
+      const c = CARD_BY_ID[id]
+      if (c && n > maxCopies && sub.includes(id)) problems.push(`${c.name}: ${n} copies across the deck and its Subconscious (max ${maxCopies}).`)
+    }
+  }
 
   if (cards.length !== size) problems.push(`The deck has ${cards.length} card${cards.length === 1 ? '' : 's'}; it needs exactly ${size}.`)
   for (const [id, n] of countCards(cards)) {
@@ -154,13 +173,18 @@ export function validateDeck(cards: string[]): DeckCheck {
 }
 
 /** Share code, e.g. "SOFA-001x3 SOFA-002x2", sorted by Chapter then set order. */
-export function deckCode(deck: Pick<Deck, 'cards'>): string {
-  const counts = countCards(deck.cards)
-  return sortCardIds([...counts.keys()]).map((id) => `${id}x${counts.get(id)}`).join(' ')
+export function deckCode(deck: Pick<Deck, 'cards' | 'subconscious'>): string {
+  const part = (cards: string[]) => {
+    const counts = countCards(cards)
+    return sortCardIds([...counts.keys()]).map((id) => `${id}x${counts.get(id)}`).join(' ')
+  }
+  return deck.subconscious?.length ? `${part(deck.cards)} / ${part(deck.subconscious)}` : part(deck.cards)
 }
 
 export interface ParsedDeckCode {
   cards: string[]
+  /** present when the code has a "/ Subconscious" part */
+  subconscious?: string[]
   /** id-like tokens that don't match a card */
   unknown: string[]
 }
@@ -176,7 +200,16 @@ for (const c of CARDS) {
  * commas, semicolons or new lines, and counts can be written "SOFA-001x3", "SOFA-001 x3",
  * "SOFA-001*3", "3x SOFA-001" or "3 SOFA-001" (no count = 1). Plain words are ignored.
  */
+/** Parses a deck code; a "/" separates the main deck from its Subconscious. */
 export function parseDeckCode(text: string): ParsedDeckCode {
+  const [main, sub] = text.split('/', 2)
+  const a = parseCards(main)
+  if (sub === undefined) return a
+  const b = parseCards(sub)
+  return { cards: a.cards, subconscious: b.cards, unknown: [...new Set([...a.unknown, ...b.unknown])] }
+}
+
+function parseCards(text: string): ParsedDeckCode {
   const cards: string[] = []
   const unknown: string[] = []
   let pending: number | null = null // count written before an id

@@ -35,7 +35,7 @@ export const RULES = {
   /** Nero, 2026-10-22 ("Cap + Eclipse"): flipping a card with the ☾ Eclipse mark cancels the opponent's bonuses for that fight.
    *  Simulator candidates: 'domain' (you flipped a card of the opponent's Domain), 'giant' (the opponent's Chapter is higher),
    *  'zero' (you flipped a 0-star card), 'heart' (a Heart-marked card), 'none' (only the cap). */
-  /** Proposed to Nero 2026-10-22: "sure means sure", a sure hit's bonuses can't be cancelled (Eclipse). */
+  /** Nero, 2026-10-22: "sure means sure", a sure hit's bonuses can't be cancelled (Eclipse). */
   sureSteady: true,
   bonusCancel: 'eclipse' as 'none' | 'eclipse' | 'domain' | 'giant' | 'zero' | 'heart',
   /** V2: brave = +1 when attacking. charming = +1 when defending. */

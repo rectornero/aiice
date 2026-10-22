@@ -9,6 +9,7 @@ import { Game } from './ui/Game'
 import { Library } from './ui/Library'
 import { Lobby } from './ui/Lobby'
 import { ArtContext } from './ui/CardView'
+import { loadAutoAdvance, saveAutoAdvance } from './ui/settings'
 import { ICON_CREDITS } from './assets/icons/icons'
 
 type Screen =
@@ -44,6 +45,7 @@ export function App() {
 }
 
 function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
+  const [autoAdvance, setAutoAdvance] = useState(loadAutoAdvance)
   const [screen, setScreen] = useState<Screen>({ kind: 'menu' })
   const [names, setNames] = useState<[string, string]>(['Player 1', 'Player 2'])
   const [deckIds, setDeckIds] = useState<[string, string]>(['music', 'fate'])
@@ -114,6 +116,10 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
             <option value="icons">Placeholder icons</option>
             <option value="figma">Figma scans (where they exist)</option>
           </select>
+        </label>
+        <label className="row gap small muted">
+          <input type="checkbox" checked={autoAdvance} onChange={(e) => { setAutoAdvance(e.target.checked); saveAutoAdvance(e.target.checked) }} />
+          Auto-continue after calls and fights
         </label>
       </div>
 

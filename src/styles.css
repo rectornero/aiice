@@ -370,3 +370,4 @@ button.essence:hover, button.essence:focus-visible { background: rgba(79, 179, 2
 @keyframes heart-beat { 0%, 100% { scale: 1 } 15% { scale: 1.25 } 30% { scale: 1 } 45% { scale: 1.15 } }
 @keyframes heart-glow { 50% { box-shadow: 0 0 0 3px #ff4f8b, 0 0 26px 8px rgba(255, 79, 139, .9) } }
 @media (prefers-reduced-motion: reduce) { .flipcard.heart, .flip-heart, .touch-banner, .touch-heart { animation: none } }
+.call-continue { margin-top: 14px; min-width: 160px; }

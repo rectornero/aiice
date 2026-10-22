@@ -59,7 +59,8 @@ function fallbackAction(s: GameState, p: PlayerIdx): Action | null {
   return s.active === p ? { t: 'endTurn' } : null
 }
 
-export function useMatch(setup: MatchSetup) {
+/** shownHit: the last Essence hit the table has finished showing; the bot waits while a newer one is on screen. */
+export function useMatch(setup: MatchSetup, shownHit = Infinity) {
   const mode = modeOf(setup.seats)
   const [m, dispatch] = useReducer(step, { s: setup.initial, past: [], reveal: null })
   const net = mode === 'online' ? setup.net : undefined
@@ -77,10 +78,11 @@ export function useMatch(setup: MatchSetup) {
     return () => { unsub(); unStatus() }
   }, [net])
 
-  // Bot: when it must act, it acts after a short pause. It waits while a fight is being revealed.
+  // Bot: when it must act, it acts after a short pause. It waits while a fight is being revealed or an Essence call shows.
   const botTurn = botSeat !== null && whoMustAct(s) === botSeat
+  const calling = (s.lastHit?.seq ?? 0) > shownHit
   useEffect(() => {
-    if (botSeat === null || !botTurn || m.reveal) return
+    if (botSeat === null || !botTurn || m.reveal || calling) return
     const id = setTimeout(() => {
       let a = setup.bot?.(s, botSeat) ?? null
       if (!a || reduce(s, a) === s) {
@@ -90,7 +92,7 @@ export function useMatch(setup: MatchSetup) {
       if (a) dispatch({ t: 'apply', a, byBot: true, keep: true })
     }, BOT_DELAY)
     return () => clearTimeout(id)
-  }, [s, botSeat, botTurn, m.reveal, setup])
+  }, [s, botSeat, botTurn, m.reveal, calling, setup])
 
   const act = (a: Action) => {
     if (net) net.submit(a)

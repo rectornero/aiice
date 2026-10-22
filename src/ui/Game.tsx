@@ -22,7 +22,9 @@ type Sel =
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`)
 
 export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
-  const { s, mode, act, undo, canUndo, reveal, dismissReveal, netStatus, botThinking } = useMatch(setup)
+  // cinematic call for each new hit on an Essence, after any fight reveal (the bot waits for it)
+  const [shownHit, setShownHit] = useState(setup.initial.lastHit?.seq ?? 0)
+  const { s, mode, act, undo, canUndo, reveal, dismissReveal, netStatus, botThinking } = useMatch(setup, shownHit)
   const [sel, setSel] = useState<Sel>(null)
   const [shownTo, setShownTo] = useState<PlayerIdx | null>(null)
   const [modal, setModal] = useState<null | { kind: 'memories' | 'discard' | 'essence'; player: PlayerIdx }>(null)
@@ -56,8 +58,6 @@ export function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void 
   }
 
   const revealView = reveal && <FightReveal key={JSON.stringify(reveal)} s={s} r={reveal} onClose={dismissReveal} />
-  // cinematic call for each new hit on an Essence, after any fight reveal
-  const [shownHit, setShownHit] = useState(s.lastHit?.seq ?? 0)
   const hit = s.lastHit && s.lastHit.seq > shownHit && !reveal ? s.lastHit : null
   const callView = hit && <EssenceCall key={hit.seq} s={s} hit={hit} onDone={() => setShownHit(hit.seq)} />
 

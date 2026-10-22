@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CARD_BY_ID } from '../game/cards'
 import type { EssenceHit, GameState } from '../game/engine'
 import { CardView } from './CardView'
+import { loadAutoAdvance } from './settings'
 
 const STEP_MS = 900
 /** the Domain most of a player's cards belong to, for the Heart call */
@@ -30,12 +31,15 @@ export function EssenceCall({ s, hit, onDone }: { s: GameState; hit: EssenceHit;
   const [step, setStep] = useState(() => (reducedMotion() ? last : 0))
   const done = useRef(onDone)
   done.current = onDone
+  const [auto] = useState(loadAutoAdvance)
   useEffect(() => {
+    // the final step waits for Continue unless auto-advance is on
+    if (step >= last && !auto) return
     const t = setTimeout(() => (step < last ? setStep(step + 1) : done.current()), step < last ? STEP_MS : 2200)
     return () => clearTimeout(t)
-  }, [step, last])
+  }, [step, last, auto])
   return (
-    <div className={`overlay call ${hit.heart ? 'heart' : ''}`} onClick={() => (step < last ? setStep(last) : done.current())} role="dialog" aria-live="assertive">
+    <div className={`overlay call ${hit.heart ? 'heart' : ''}`} onClick={() => step < last && setStep(last)} role="dialog" aria-live="assertive">
       <div className="call-body">
         {lines.map((l, i) => i <= step && <div key={i} className={`call-line l${i}`}>{l}</div>)}
         {step >= last && !hit.heart && (
@@ -45,7 +49,9 @@ export function EssenceCall({ s, hit, onDone }: { s: GameState; hit: EssenceHit;
           </div>
         )}
         {step >= last && hit.heart && <div className="call-heart">♥</div>}
-        <div className="call-skip">Tap to {step < last ? 'skip' : 'continue'}</div>
+        {step < last
+          ? <div className="call-skip">Tap to skip</div>
+          : <button type="button" className="btn primary call-continue" autoFocus onClick={(e) => { e.stopPropagation(); done.current() }}>Continue</button>}
       </div>
     </div>
   )

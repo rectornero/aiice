@@ -1,4 +1,4 @@
-import { HEART_MARKS } from '../game/engine'
+import { ECLIPSE_MARKS, HEART_MARKS, SHIELD_MARKS, SURGE_MARKS } from '../game/engine'
 import { createContext, useContext, type ReactNode } from 'react'
 import { ICONS } from '../assets/icons/icons'
 import { cardName, type Card } from '../game/cards'
@@ -15,6 +15,18 @@ export function CardText({ text }: { text: string }) {
     else if (p) parts.push(<span key={i}>{p}</span>)
   })
   return <>{parts}</>
+}
+
+/** The fight marks next to the stars: ♥ Heart, ☾ Eclipse, ⚡ Surge, ◈ Shield. */
+function Marks({ card }: { card: Card }) {
+  return (
+    <>
+      {(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}
+      {(card.eclipse || ECLIPSE_MARKS.has(card.id)) && <span className="eclipse-mark" title="Eclipse mark: flipped, it cancels the opponent’s bonuses">☾</span>}
+      {(card.surge || SURGE_MARKS.has(card.id)) && <span className="surge-mark" title="Surge mark: flipped, you flip one more card">⚡</span>}
+      {(card.shield || SHIELD_MARKS.has(card.id)) && <span className="shield-mark" title="Shield mark: flipped, your Entity can’t be told this fight">◈</span>}
+    </>
+  )
 }
 
 export function Stars({ n }: { n: number }) {
@@ -77,12 +89,12 @@ export function CardView({ card, size = 'md', selected, dim, onClick, badge, ext
               <>
                 <span className="fate" title="Fate: cards flipped">⟲{card.fate}</span>
                 <span className="sure" title="Sure hit">{card.sure}</span>
-                <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}
+                <Stars n={card.stars} /><Marks card={card} />
               </>
             ) : (
               <>
                 {!tile && <span className="kind">{card.type === 'Word' ? `${card.whisper ? 'Whisper · ' : ''}Echo ${card.echo ?? 1}` : card.type}</span>}
-                <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}
+                <Stars n={card.stars} /><Marks card={card} />
               </>
             )}
           </div>
@@ -119,14 +131,14 @@ export function CardDetails({ card }: { card: Card }) {
         <div className="statline">
           <span><b>Fate</b> {card.fate}</span>
           <span><b>Sure hit</b> {card.sure}</span>
-          <span><b>Stars</b> <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}</span>
+          <span><b>Stars</b> <Stars n={card.stars} /><Marks card={card} /></span>
         </div>
       )}
       {card.type === 'Word' && (
         <div className="statline">
           <span><b>Echo</b> {card.echo ?? 1}: needs {(card.echo ?? 1) - 1} Word{card.echo === 2 ? '' : 's'} already in your Chant</span>
           {card.whisper && <span><b>Whisper</b>: can also be played from your Thoughts during a fight</span>}
-          <span><b>Stars</b> <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}</span>
+          <span><b>Stars</b> <Stars n={card.stars} /><Marks card={card} /></span>
         </div>
       )}
       <p className="ctext"><CardText text={card.text} /></p>

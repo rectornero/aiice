@@ -85,6 +85,12 @@ export interface Card {
   image?: string
   /** V2.3: Heart mark next to the Fate stars ("Memories that touch") */
   heart?: boolean
+  /** ☾ Eclipse mark (Nero, 2026-10-22): flipped in a fight, it cancels the opponent's bonuses */
+  eclipse?: boolean
+  /** ⚡ Surge mark (Nero, 2026-10-22): flipped in a fight, you flip one more card */
+  surge?: boolean
+  /** ◈ Shield mark (Nero, 2026-10-22): flipped in a fight, your Entity can't be told this fight */
+  shield?: boolean
 }
 
 export const CARDS: Card[] = [
@@ -104,7 +110,7 @@ export const CARDS: Card[] = [
   { id: 'SOFA-007', name: 'Luminelle', title: 'Radiant Songstress', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 2, stars: 1, rarity: 'R', icon: 'sing', image: a007,
     text: '[B]: All your Music Entities gain inspiring.', flavor: 'I hope my voice will reach your heart... and that you’d sing with me.' },
   { id: 'SOFA-008', name: 'Aqua Serenade', title: 'Seraphic Violinist', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 2, stars: 1, rarity: 'R', icon: 'harp', image: a008,
-    text: 'Your Music Pianists gain brave and fated, and ignore inoffensive (not inoffensive: +1 instead). When read: your Music Entities get +1.', flavor: 'I can’t say it with words... I’ll tell you with music.' },
+    text: 'Your Music Pianists gain brave and fated, and ignore inoffensive (not inoffensive: +1 instead). When told: your Music Entities get +1.', flavor: 'I can’t say it with words... I’ll tell you with music.' },
   { id: 'SOFA-009', name: 'Zephyr Melody', title: 'Whirlwind Guitarist', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 1, stars: 1, rarity: 'R', icon: 'guitar', image: a009,
     text: '[B]: Forget 1 card. Remember 1 Music Word with Echo 1 and 1 with Echo 2.', flavor: 'Now it’s our time... let’s reach the heavens!' },
   { id: 'SOFA-010', name: 'Pyrothump', title: 'Inferno Drummer', type: 'Entity', domain: 'Music', chapter: 2, fate: 3, sure: 3, stars: 1, rarity: 'R', icon: 'drum', image: a010,
@@ -146,7 +152,7 @@ export const CARDS: Card[] = [
   { id: 'SOFA-026', name: 'Kazuki Amagiri', title: 'Magister Magician', type: 'Entity', domain: 'Fate', chapter: 2, fate: 2, sure: 1, stars: 1, rarity: 'R', icon: 'wizard-face', image: a026,
     text: '[B]: Remember 1 Fate Word with Echo 2. Once per turn, when you Echo: remember 1 Fate Word with Echo 1, then forget 1 card.', flavor: 'Luck? It’s all about weaving our skills with opportunity. Let’s find the right ones together.' },
   { id: 'SOFA-027', name: 'Kurogane Ikazuchi', title: 'Devil’s Adept', type: 'Entity', domain: 'Fate', chapter: 2, fate: 1, sure: 2, stars: 1, rarity: 'R', icon: 'devil-mask', image: a027,
-    text: 'When it would be read, reveal 1 of your Values instead. When it reads an Entity in a fight: it gets +1.', flavor: 'Death? I am no stranger to it. I witness it every time one like you falls. She doesn’t like me either.' },
+    text: 'When it would be told, reveal 1 of your Values instead. When an Entity it fights is told: it gets +1.', flavor: 'Death? I am no stranger to it. I witness it every time one like you falls. She doesn’t like me either.' },
   { id: 'SOFA-028', name: 'Hikari Mizuki', title: 'Blessed by the Star', type: 'Entity', domain: 'Fate', chapter: 2, fate: 1, sure: 1, stars: 0, rarity: 'R', icon: 'polar-star', image: a028,
     text: '[B]: Your Entities can’t be read until the end of your next turn. While imagined: your Entities gain fated (already fated: +2).', flavor: 'May the Star bless this city... and our valiant warriors protect it. I will relay your wishes to them.' },
   { id: 'SOFA-029', name: 'Noboru Amano', title: 'Fallen Tower Samurai', type: 'Entity', domain: 'Fate', chapter: 2, fate: 1, sure: 1, stars: 0, rarity: 'R', icon: 'samurai-helmet', image: a029,
@@ -170,7 +176,7 @@ export const CARDS: Card[] = [
   { id: 'SOFA-046', name: 'Sakura Blossom Call', type: 'Word', domain: 'Fate', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 1, heart: true, rarity: 'C', icon: 'spiral-bloom', image: a046,
     text: 'Not during a fight: remember 1 Fate Entity of Chapter 1 and continue a Story that has a Familiar. Echo: draw 1.', flavor: 'We familiars can hear the Voice: not only our Masters, but everyone who hears its call.' },
   { id: 'SOFA-047', name: 'Crimson Vengeance', type: 'Word', domain: 'Fate', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 2, rarity: 'C', icon: 'falling-star', image: a047,
-    text: '1 Entity gains brave. When an Entity is read: 1 Entity gets +2 this turn. Echo: forget 1 card, draw 1.', flavor: 'Some get forgotten. Others are remembered. I won’t ever forget them. AND YOU WON’T EITHER!!!' },
+    text: '1 Entity gains brave. When an Entity is told: 1 Entity gets +2 this turn. Echo: forget 1 card, draw 1.', flavor: 'Some get forgotten. Others are remembered. I won’t ever forget them. AND YOU WON’T EITHER!!!' },
   { id: 'SOFA-048', name: 'Clear Skies Knowledge', type: 'Word', domain: 'Fate', chapter: 0, echo: 1, fate: 0, sure: 0, stars: 2, heart: true, rarity: 'C', icon: 'stars-stack', image: a048,
     text: 'Draw 1, forget 1 card, and 1 Entity gains fated. Echo: do it again.', flavor: 'Sometimes, at night, I watch the sky, and wish good luck to someone. Sometimes, I stay a bit more, and think of you too.' },
   { id: 'SOFA-049', name: 'Storm Dragon Roar', type: 'Word', domain: 'Fate', chapter: 0, echo: 2, fate: 0, sure: 0, stars: 1, whisper: true, rarity: 'C', icon: 'lightning-saber', image: a049,
@@ -188,7 +194,7 @@ export const CARDS: Card[] = [
   { id: 'SOFA-059', name: 'Ruler’s Insignia', title: 'Helm of the Emperor', type: 'Relic', domain: 'Fate', chapter: 0, fate: 0, sure: 0, stars: 2, rarity: 'C', icon: 'lion', image: a059,
     text: 'Equip to a Story: its Entity gains inspiring.', flavor: 'A ruler’s face doesn’t matter: they don’t fight for themselves. Their resolve and heart are those of their people.' },
   { id: 'SOFA-060', name: 'Devil Drinker', title: 'Cursed Edge', type: 'Relic', domain: 'Fate', chapter: 0, fate: 0, sure: 0, stars: 0, rarity: 'C', icon: 'devil-mask', image: a060,
-    text: 'Reveal 1 of your Values. Equip to a Story: its Entity gains dual-striker; it is read at the end of your next turn. Playable from your Reverie.', flavor: 'This blade claims blood: your enemies’. Your servants’. Your own.' },
+    text: 'Reveal 1 of your Values. Equip to a Story: its Entity gains dual-striker; it is told at the end of your next turn. Playable from your Reverie.', flavor: 'This blade claims blood: your enemies’. Your servants’. Your own.' },
 ]
 
 export const CARD_BY_ID: Record<string, Card> = Object.fromEntries(CARDS.map((c) => [c.id, c]))

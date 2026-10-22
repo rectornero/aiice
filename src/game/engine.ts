@@ -30,6 +30,14 @@ export const RULES = {
   maxChants: 3,
   /** V2: when the Chant is full, it is complete and all its Words are forgotten. */
   phraseClears: true,
+  /** Nero, 2026-10-22 ("Cap + Heart"): a fighter counts at most +N from bonuses (0 = no cap). */
+  bonusCap: 3,
+  /** Nero, 2026-10-22 ("Cap + Eclipse"): flipping a card with the ☾ Eclipse mark cancels the opponent's bonuses for that fight.
+   *  Simulator candidates: 'domain' (you flipped a card of the opponent's Domain), 'giant' (the opponent's Chapter is higher),
+   *  'zero' (you flipped a 0-star card), 'heart' (a Heart-marked card), 'none' (only the cap). */
+  /** Proposed to Nero 2026-10-22: "sure means sure", a sure hit's bonuses can't be cancelled (Eclipse). */
+  sureSteady: true,
+  bonusCancel: 'eclipse' as 'none' | 'eclipse' | 'domain' | 'giant' | 'zero' | 'heart',
   /** V2: brave = +1 when attacking. charming = +1 when defending. */
   braveCharming: true,
   /** V2: if the opponent imagines a defender, attacks must target a defender. */
@@ -48,8 +56,8 @@ export const RULES = {
   /** V2.1 (Nero, 2026-10-22): "5 Values and one Heart". Essence is now called Values; with no face-down Value left,
    *  the next hit reaches the Heart and ends the game. Off: you lose when the last Value is lost. */
   heart: true,
-  /** V2.2 (Nero, 2026-10-22, rulebook §6): a beaten (read) Entity with a Chapter under it goes face down under its Story
-   *  (a read Chapter). Reading the last face-up Entity of an opponent's Story with read Chapters lays it bare:
+  /** V2.2 (Nero, 2026-10-22, rulebook §6): a beaten (told; was "read" until Nero renamed it 2026-10-22) Entity with a Chapter under it goes face down under its Story
+   *  (a told Chapter). Telling the last face-up Entity of an opponent's Story with told Chapters lays it bare:
    *  the Story empties and reaches its owner's Essence (reveal 1 Value). */
   storyLaidBare: true,
   /** V2.3 "Memories that touch" (Nero, 2026-10-22, rulebook §9): an attacker that wins a fight in which it flipped
@@ -117,6 +125,22 @@ export interface Mods {
   fightFlips?: number
   /** Storm Dragon Roar: draw 1 if it wins the current fight */
   fightDraw?: boolean
+  /** where bonus, turnBonus and fightBonus come from, for the UI */
+  notes?: BonusNote[]
+}
+
+/** One named part of an Entity's +N/−N. */
+export interface BonusPart {
+  n: number
+  label: string
+}
+
+export interface BonusNote extends BonusPart {
+  scope: 'game' | 'turn' | 'fight'
+}
+
+export function addNote(m: Mods, n: number, label: string, scope: BonusNote['scope']) {
+  if (n) (m.notes ??= []).push({ n, label, scope })
 }
 
 export interface Story {
@@ -127,7 +151,7 @@ export interface Story {
   /** last turn this Story was started or continued (each Story moves once per turn) */
   movedTurn: number
   attackedTurn: number
-  /** V2.2: read Chapters, face down under the Story */
+  /** V2.2: told Chapters, face down under the Story */
   lost?: CardInst[]
   /** rulebook §6b: the Relic tucked under this Story (1 per Story); it powers whichever Entity is on top */
   relic?: CardInst
@@ -174,6 +198,10 @@ export interface FightSide {
   mode: FightMode
   base: number
   bonus: number
+  /** where the bonus comes from */
+  parts?: BonusPart[]
+  /** ⚡ extra cards flipped because of Surge marks */
+  surged?: number
   flips: number
   flipped: CardInst[]
   total: number
@@ -183,6 +211,10 @@ export interface FightResult {
   attacker: FightSide
   defender: FightSide
   outcome: 'attacker' | 'defender' | 'tie'
+  /** what happened in the fight window before the reveal (whispers, abilities), for the fight story */
+  before?: string[]
+  /** what the fight caused (told, Values revealed, draws, after-fight effects), for the damage report */
+  after?: string[]
 }
 
 export interface PendingFight {
@@ -191,6 +223,8 @@ export interface PendingFight {
   modes: [FightMode | null, FightMode | null]
   /** set 1: each player can whisper once per fight */
   whispered?: [boolean, boolean]
+  /** log lines written during the fight window (whispers, abilities) */
+  events?: string[]
 }
 
 export type Phase = 'main' | 'fight'
@@ -245,6 +279,8 @@ export interface GameState {
   lastHit: EssenceHit | null
   winner: PlayerIdx | null
   log: string[]
+  /** while a fight resolves: the log lines it causes, for the damage report */
+  capture?: string[]
 }
 
 export type Action =
@@ -336,6 +372,40 @@ export function bonusDetails(s: GameState, uid: string): { permanent: number; tu
   const m = modsOf(s, uid)
   return { permanent: m.bonus, turn: m.turnBonus + (m.fightBonus ?? 0), continuous: fieldOf(s).get(uid)?.bonus ?? 0 }
 }
+
+/** An Entity's bonus as named parts (cards, traits), adding up to powerBonus (+ roleBonus when a role is given). */
+export function bonusParts(s: GameState, uid: string, role?: 'attacker' | 'defender'): BonusPart[] {
+  const m = modsOf(s, uid)
+  const parts: BonusPart[] = []
+  const add = (n: number, label: string) => {
+    if (!n) return
+    const p = parts.find((x) => x.label === label)
+    if (p) p.n += n
+    else parts.push({ n, label })
+  }
+  const notes = m.notes ?? []
+  const noted = (scope: BonusNote['scope']) => notes.filter((x) => x.scope === scope).reduce((t, x) => t + x.n, 0)
+  for (const x of notes) add(x.n, x.label)
+  // bonuses from before notes existed (or not noted) still show, unnamed
+  add(m.bonus + m.turnBonus + (m.fightBonus ?? 0) - noted('game') - noted('turn') - noted('fight'), 'Other effects')
+  for (const x of fieldOf(s).get(uid)?.from ?? []) add(x.n, x.label)
+  if (role && RULES.braveCharming) {
+    if (role === 'defender' && hasTrait(s, uid, 'charming')) add(1, 'charming')
+    if (role === 'attacker' && hasTrait(s, uid, 'brave')) add(1, 'brave')
+    if (role === 'attacker' && hasTrait(s, uid, 'inoffensive')) add(-1, 'inoffensive')
+  }
+  const out = parts.filter((p) => p.n)
+  const sum = out.reduce((t, p) => t + p.n, 0)
+  if (role && RULES.bonusCap && sum > RULES.bonusCap) out.push({ n: RULES.bonusCap - sum, label: `cap (max +${RULES.bonusCap})` })
+  return out
+}
+
+/** What an Entity adds in a fight in this role: its bonus and role traits, capped (before any Heart cancels it). */
+export function fightBonus(s: GameState, uid: string, role: 'attacker' | 'defender'): number {
+  return capBonus(powerBonus(s, uid) + roleBonus(s, uid, role))
+}
+
+export const capBonus = (n: number) => (RULES.bonusCap ? Math.min(n, RULES.bonusCap) : n)
 
 /** V2: what traits add in a fight: brave +1 when attacking, charming +1 when defending. Set 1: inoffensive −1 when attacking. */
 export function roleBonus(s: GameState, uid: string, role: 'attacker' | 'defender'): number {
@@ -485,6 +555,8 @@ export function canStart(s: GameState, p: PlayerIdx, c: CardInst): boolean {
 
 export function log(s: GameState, msg: string) {
   s.log = [...s.log.slice(-199), msg]
+  if (s.capture) s.capture.push(msg)
+  else if (s.pendingFight) (s.pendingFight.events ??= []).push(msg)
 }
 
 /** V2.7: when Memories are empty, the Subconscious becomes Memories. */
@@ -618,14 +690,14 @@ export function removeTop(s: GameState, p: PlayerIdx, storyId: string, byFoe = f
   if (!story) return
   const gone = story.cards.pop()!
   delete s.mods[gone.uid]
-  // V2.2 (rulebook §6, Nero: "we don't delete"): a beaten Entity is read. The Story falls back a Chapter and the
-  // Entity stays under it face down as a read Chapter; with no Chapter under it, it is forgotten.
+  // V2.2 (rulebook §6, Nero: "we don't delete"): a beaten Entity is told. The Story falls back a Chapter and the
+  // Entity stays under it face down as a told Chapter; with no Chapter under it, it is forgotten.
   if (RULES.storyLaidBare && story.cards.length > 0) {
     ;(story.lost ??= []).push(gone)
-    log(s, `${cardName(card(gone))} is read: it turns face down under its Story.`)
+    log(s, `${cardName(card(gone))} is told: it turns face down under its Story.`)
   } else {
     pl.discard.push(gone)
-    log(s, `${cardName(card(gone))} is read and forgotten.`)
+    log(s, `${cardName(card(gone))} is told and forgotten.`)
   }
   if (story.cards.length > 0) return
   pl.stories = pl.stories.filter((st) => st.id !== storyId)
@@ -833,8 +905,8 @@ function step(s: GameState, a: Action): boolean {
       if (!target) return false
       story.attacks = firstAttack ? 1 : (story.attacks ?? 1) + 1
       story.attackedTurn = s.turn
-      s.pendingFight = { attacker: { player: me, storyId: story.id }, defender: { player: foe, storyId: target.id }, modes: [null, null], whispered: [false, false] }
       log(s, `${cardName(card(atk))} attacks ${cardName(card(top(target)))}.`)
+      s.pendingFight = { attacker: { player: me, storyId: story.id }, defender: { player: foe, storyId: target.id }, modes: [null, null], whispered: [false, false] }
       return true
     }
     case 'cancelAttack': {
@@ -865,6 +937,7 @@ function step(s: GameState, a: Action): boolean {
       if (s.winner !== null) return true
       for (const m of Object.values(s.mods)) {
         m.turnBonus = 0
+        if (m.notes) m.notes = m.notes.filter((x) => x.scope === 'game')
         m.traits = m.traits.filter((t) => !t.oneTurn && !(t.untilTurn !== undefined && t.untilTurn <= s.turn))
       }
       if (RULES.starlessFades) {
@@ -891,6 +964,7 @@ function step(s: GameState, a: Action): boolean {
       const m = (s.mods[a.uid] = modsOf(s, a.uid))
       if (a.oneTurn) m.turnBonus += a.delta
       else m.bonus += a.delta
+      addNote(m, a.delta, 'Adjusted by hand', a.oneTurn ? 'turn' : 'game')
       return true
     }
     case 'trait': {
@@ -1025,16 +1099,39 @@ function findOnField(s: GameState, uid: string): CardInst | null {
 export const HEART_MARKS = new Set<string>()
 export const hasHeartMark = (c: CardInst) => !!card(c).heart || HEART_MARKS.has(c.cardId)
 
+/** ☾ Eclipse mark (Nero, 2026-10-22): flipped, it cancels the opponent's bonuses. Card data sets `eclipse: true`; the simulator can add ids here. */
+export const ECLIPSE_MARKS = new Set<string>()
+export const hasEclipseMark = (c: CardInst) => !!card(c).eclipse || ECLIPSE_MARKS.has(c.cardId)
+
+/** ⚡ Surge mark (Nero, 2026-10-22): flipped in a fight, you flip one more card. Card data sets `surge: true`. */
+export const SURGE_MARKS = new Set<string>()
+export const hasSurgeMark = (c: CardInst) => !!card(c).surge || SURGE_MARKS.has(c.cardId)
+/** ◈ Shield mark (Nero, 2026-10-22): flipped in a fight, your Entity can't be told this fight, even if it loses. Card data sets `shield: true`. */
+export const SHIELD_MARKS = new Set<string>()
+export const hasShieldMark = (c: CardInst) => !!card(c).shield || SHIELD_MARKS.has(c.cardId)
+/** HOUSE RULE: a chain of Surges flips at most this many extra cards, so a small Memories can't loop forever. */
+const MAX_SURGE = 5
+
 function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): FightSide {
-  const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
+  const bonus = fightBonus(s, c.uid, role)
+  const parts = bonusParts(s, c.uid, role)
   if (mode === 'sure') {
     const base = sureOf(s, c)
-    return { player, card: c, mode, base, bonus, flips: 0, flipped: [], total: base + bonus }
+    return { player, card: c, mode, base, bonus, parts, flips: 0, flipped: [], total: base + bonus }
   }
   const flips = flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0)
   const flipped = flipCards(s, player, flips)
+  // ⚡ Surge: each Surge card flipped makes you flip one more
+  let surged = 0
+  for (let i = 0; i < flipped.length && surged < MAX_SURGE; i++) {
+    if (!hasSurgeMark(flipped[i])) continue
+    const more = flipCards(s, player, 1)
+    if (!more.length) break
+    flipped.push(...more)
+    surged++
+  }
   const base = flipped.reduce((n, x) => n + card(x).stars, 0)
-  return { player, card: c, mode, base, bonus, flips, flipped, total: base + bonus }
+  return { player, card: c, mode, base, bonus, parts, flips, flipped, surged, total: base + bonus }
 }
 
 /** Clears the pending fight and every fight-only bonus (set 1). Also used when a Whisper ends the fight. */
@@ -1044,6 +1141,35 @@ export function endFight(s: GameState) {
     delete m.fightBonus
     delete m.fightFlips
     delete m.fightDraw
+    if (m.notes) m.notes = m.notes.filter((x) => x.scope !== 'fight')
+  }
+}
+
+/** Why x's bonus is cancelled by its foe this fight (RULES.bonusCancel), or null. */
+function cancelReason(x: FightSide, foe: FightSide): string | null {
+  if (RULES.sureSteady && x.mode === 'sure') return null
+  const k = card(x.card)
+  switch (RULES.bonusCancel) {
+    case 'domain': {
+      const c = foe.flipped.find((f) => card(f).domain === k.domain)
+      return c ? `cancelled: ${card(foe.card).name} flipped ${card(c).name}, a ${k.domain} card` : null
+    }
+    case 'giant':
+      return k.chapter > card(foe.card).chapter ? `cancelled: ${card(foe.card).name} is a giant slayer` : null
+    case 'zero': {
+      const c = foe.flipped.find((f) => card(f).stars === 0)
+      return c ? `cancelled: ${card(foe.card).name} flipped ${card(c).name}, a 0-star card` : null
+    }
+    case 'eclipse': {
+      const c = foe.flipped.find(hasEclipseMark)
+      return c ? `eclipsed by ☾ ${card(c).name}` : null
+    }
+    case 'heart': {
+      const c = foe.flipped.find(hasHeartMark)
+      return c ? `cancelled by ♥ ${card(c).name}` : null
+    }
+    default:
+      return null
   }
 }
 
@@ -1053,6 +1179,13 @@ function resolveFight(s: GameState) {
   const defStory = findStory(s, f.defender.storyId)!.story
   const attacker = fightSide(s, f.attacker.player, top(atkStory), f.modes[f.attacker.player]!, 'attacker')
   const defender = fightSide(s, f.defender.player, top(defStory), f.modes[f.defender.player]!, 'defender')
+  for (const [x, foe] of [[attacker, defender], [defender, attacker]] as const) {
+    const why = x.bonus > 0 ? cancelReason(x, foe) : null
+    if (!why) continue
+    x.parts = [...(x.parts ?? []), { n: -x.bonus, label: why }]
+    x.total -= x.bonus
+    x.bonus = 0
+  }
   // HOUSE RULE (rulebook [open]): on a tie nothing happens.
   const sureTie = RULES.sureWinsTies && attacker.total === defender.total && attacker.mode !== defender.mode
   const outcome = attacker.total > defender.total ? 'attacker' : defender.total > attacker.total ? 'defender'
@@ -1060,12 +1193,17 @@ function resolveFight(s: GameState) {
   // read before the fight-only mods are cleared and before the loser leaves
   const drawsOnWin = (x: FightSide) => (hasTrait(s, x.card.uid, 'inspiring') ? 1 : 0) + (modsOf(s, x.card.uid).fightDraw ? 1 : 0)
   const winnerDraws = outcome === 'attacker' ? drawsOnWin(attacker) : outcome === 'defender' ? drawsOnWin(defender) : 0
+  const before = f.events ?? []
   endFight(s)
-  s.lastFight = { attacker, defender, outcome }
+  const capture: string[] = []
+  s.capture = capture
+  s.lastFight = { attacker, defender, outcome, before, after: capture }
   const desc = (x: FightSide) => `${cardName(card(x.card))} ${x.mode === 'sure' ? 'takes its sure hit' : `flips ${x.flips}`} → ${x.total}`
   log(s, `Fight: ${desc(attacker)} vs ${desc(defender)}.`)
   const loser = outcome === 'attacker' ? defender : outcome === 'defender' ? attacker : null
-  const deleted = loser ? destroy(s, loser.card.uid) : false
+  const shield = loser?.flipped.find(hasShieldMark)
+  if (loser && shield) log(s, `◈ ${card(shield).name} shields ${card(loser.card).name}: it loses, but it isn't told.`)
+  const deleted = loser && !shield ? destroy(s, loser.card.uid) : false
   if (!loser) log(s, 'Tie: both Entities survive.')
   if (RULES.memoriesTouch && outcome === 'attacker' && s.winner === null && attacker.flipped.some(hasHeartMark) && !(RULES.sureBlocksTouch && defender.mode === 'sure')) {
     log(s, `${cardName(card(attacker.card))}'s Memories touch ${s.players[defender.player].name}: “I Dream your Value!”`)
@@ -1086,4 +1224,6 @@ function resolveFight(s: GameState) {
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
     { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },
   ])
+  delete s.capture
+  capture.shift() // the "Fight: …" summary line; the story tells it
 }

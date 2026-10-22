@@ -6,7 +6,7 @@
 import { CARD_BY_ID, type Card } from './cards'
 import { whoMustAct, type BotPolicy } from './driver'
 import {
-  attackTargets, canActivate, canAttackPlayer, canEquip, canWhisper, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, hasHeartMark, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
+  attackTargets, canActivate, canAttackPlayer, canEquip, canWhisper, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, capBonus, fightBonus, hasHeartMark, powerBonus, reduce, sureOf, traitsOf, UNDELETABLE,
   type Action, type CardInst, type FightMode, type GameState, type PendingChoice, type PlayerIdx, type Story,
 } from './engine'
 
@@ -70,7 +70,7 @@ function flipDist(s: GameState, p: PlayerIdx, flips: number, bonus: number): Dis
 }
 
 function sideDist(s: GameState, p: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): Dist {
-  const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
+  const bonus = fightBonus(s, c.uid, role)
   return mode === 'sure' ? [[sureOf(s, c) + bonus, 1]] : flipDist(s, p, flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0), bonus)
 }
 
@@ -89,7 +89,7 @@ function odds(a: Dist, d: Dist, ma?: FightMode, md?: FightMode) {
 
 /** Expected fight total of an Entity when it picks its better mode on average. */
 function strength(s: GameState, p: PlayerIdx, c: CardInst) {
-  return Math.max(sureOf(s, c), flipsFor(s, c) * avgStars(s, p)) + powerBonus(s, c.uid)
+  return Math.max(sureOf(s, c), flipsFor(s, c) * avgStars(s, p)) + capBonus(powerBonus(s, c.uid))
 }
 
 /** What revealing one of a player's Values is worth to the opponent. */

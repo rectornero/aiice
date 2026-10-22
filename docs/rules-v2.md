@@ -113,3 +113,14 @@ Change of Values almost never happens (about once per 70 games). Defenders flip 
 | E +6 | 44.7% | 52.5% | 48.8% | 15.5 | 3.98 | 0.47 | 21% |
 
 Switches: RULES.defenseExtraFlips, changeMax, changeOnTie, changeForAttacker (all off by default).
+
+### F: Change of Values from the Chant (proposal)
+
+When your Chant completes (the 3rd Word lands), you may make one Change of Values. The defender's ♥ trigger is off. 1000 games, 5 ♥ (RULES.changeTrigger = 'chant'):
+
+| variant | Music | Fate | 1st player | turns | winner's face-down Values | Changes / game | Chants completed / game |
+|---|---|---|---|---|---|---|---|
+| v2.4 | 45.3% | 51.6% | 54.8% | 15.7 | 3.81 | 0.01 | 1.16 |
+| F | 45.6% | 51.2% | 54.9% | 16.1 | 3.93 | 0.45 | 1.17 |
+| v2.4 +6 | 45.4% | 52.0% | 49.1% | 15.2 | 3.71 | 0.01 | 1.22 |
+| F +6 | 45.1% | 52.3% | 49.6% | 15.6 | 3.86 | 0.49 | 1.23 |

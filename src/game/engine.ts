@@ -62,6 +62,8 @@ export const RULES = {
   changeOnTie: false,
   /** candidate: an attacker that touches may also make a Change of Values */
   changeForAttacker: false,
+  /** where Change of Values comes from: a defender's ♥ win (v2.4) or completing your Chant (candidate F) */
+  changeTrigger: 'defender' as 'defender' | 'chant',
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -625,6 +627,7 @@ function step(s: GameState, a: Action): boolean {
         log(s, `${pl.name}'s Chant is complete: ${pl.chants.map((x) => card(x).name).join(', ')} are forgotten.`)
         pl.discard.push(...pl.chants)
         pl.chants = []
+        if (RULES.changeOfValues && RULES.changeTrigger === 'chant') offerChangeOfValues(s, me, c)
       }
       return true
     }
@@ -844,7 +847,7 @@ function resolveFight(s: GameState) {
     log(s, `${s.players[loser.player].name} lost the fight: they take a hit.`)
     loseEssence(s, loser.player, 1, card(loser === attacker ? defender.card : attacker.card).name)
   }
-  if (RULES.changeOfValues && (outcome === 'defender' || (RULES.changeOnTie && outcome === 'tie')) && s.winner === null && defender.flipped.some(hasHeartMark)) offerChangeOfValues(s, defender.player, defender.card)
+  if (RULES.changeOfValues && RULES.changeTrigger === 'defender' && (outcome === 'defender' || (RULES.changeOnTie && outcome === 'tie')) && s.winner === null && defender.flipped.some(hasHeartMark)) offerChangeOfValues(s, defender.player, defender.card)
   afterFight(s, [
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
     { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },

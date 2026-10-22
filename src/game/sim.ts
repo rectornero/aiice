@@ -26,6 +26,8 @@ export interface GameRecord {
   touches: number
   /** Change of Values uses (V2.4) */
   changes: number
+  /** completed Chants */
+  chants: number
   /** attacker's mode choices: [flip, sure] */
   attackModes: [number, number]
   defenseModes: [number, number]
@@ -54,6 +56,7 @@ export function playGame(opts: {
   let laidBare = 0
   let touches = 0
   let changes = 0
+  let chants = 0
   const modes = [0, 0]
   const dmodes = [0, 0]
   while (s.winner === null && s.turn <= maxTurns) {
@@ -67,6 +70,7 @@ export function playGame(opts: {
     opts.onAction?.(s, a, next)
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'bare') laidBare++
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'touch') touches++
+    if (a.t === 'chant' && s.players[s.active].chants.length > 0 && next.players[s.active].chants.length === 0) chants++
     if (a.t === 'choose' && s.choices[0]?.effect === 'cov2' && a.picks.length) changes++
     if (a.t === 'chooseMode' && s.pendingFight?.defender.player === a.player) dmodes[a.mode === 'flip' ? 0 : 1]++
     if (a.t === 'chooseMode' && s.pendingFight?.attacker.player === a.player) modes[a.mode === 'flip' ? 0 : 1]++
@@ -90,6 +94,7 @@ export function playGame(opts: {
     laidBare,
     touches,
     changes,
+    chants,
     attackModes: [modes[0], modes[1]],
     defenseModes: [dmodes[0], dmodes[1]],
     played,
@@ -114,6 +119,7 @@ export interface SimStats {
   laidBarePerGame: number
   touchesPerGame: number
   changesPerGame: number
+  chantsPerGame: number
   /** share of attacks where the attacker flipped instead of taking the sure hit */
   attackFlipRate: number
   defenseFlipRate: number
@@ -123,7 +129,7 @@ export interface SimStats {
 
 /** Plays `games` bot-vs-bot games. Seats alternate every game so both decks sit in both seats. */
 export function simulate(opts: { games: number; seed: number; decks: [string[], string[]]; levels?: [BotLevel, BotLevel]; maxTurns?: number }): SimStats {
-  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, attackFlipRate: 0, defenseFlipRate: 0, played: {} }
+  const st: SimStats = { games: opts.games, wins: [0, 0], winsBySeat: [0, 0], draws: 0, avgTurns: 0, avgWinnerEssence: 0, firstPlayerWinRate: 0, heartRate: 0, laidBarePerGame: 0, touchesPerGame: 0, changesPerGame: 0, chantsPerGame: 0, attackFlipRate: 0, defenseFlipRate: 0, played: {} }
   let turns = 0
   let essence = 0
   let firstWins = 0
@@ -131,6 +137,7 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   let bare = 0
   let touch = 0
   let change = 0
+  let chant = 0
   const am = [0, 0]
   const dm = [0, 0]
   for (let g = 0; g < opts.games; g++) {
@@ -140,6 +147,7 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
     bare += r.laidBare
     touch += r.touches
     change += r.changes
+    chant += r.chants
     am[0] += r.attackModes[0]
     am[1] += r.attackModes[1]
     dm[0] += r.defenseModes[0]
@@ -163,6 +171,7 @@ export function simulate(opts: { games: number; seed: number; decks: [string[], 
   st.laidBarePerGame = opts.games ? bare / opts.games : 0
   st.touchesPerGame = opts.games ? touch / opts.games : 0
   st.changesPerGame = opts.games ? change / opts.games : 0
+  st.chantsPerGame = opts.games ? chant / opts.games : 0
   st.attackFlipRate = am[0] + am[1] ? am[0] / (am[0] + am[1]) : 0
   st.defenseFlipRate = dm[0] + dm[1] ? dm[0] / (dm[0] + dm[1]) : 0
   return st

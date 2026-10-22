@@ -71,7 +71,7 @@ export function playGame(opts: {
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'bare') laidBare++
     if (next.lastHit && next.lastHit.seq !== s.lastHit?.seq && next.lastHit.how === 'touch') touches++
     if (a.t === 'chant' && s.players[s.active].chants.length > 0 && next.players[s.active].chants.length === 0) chants++
-    if (a.t === 'choose' && s.choices[0]?.effect === 'cov2' && a.picks.length) changes++
+    if (s.players.some((pl, i) => next.players[i].essence > pl.essence && next.players[i].lost < pl.lost)) changes++
     if (a.t === 'chooseMode' && s.pendingFight?.defender.player === a.player) dmodes[a.mode === 'flip' ? 0 : 1]++
     if (a.t === 'chooseMode' && s.pendingFight?.attacker.player === a.player) modes[a.mode === 'flip' ? 0 : 1]++
     const now = new Set<string>()

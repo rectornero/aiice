@@ -205,7 +205,8 @@ describe('V2.3: Memories that touch', () => {
 })
 
 describe('V2.4: Change of Values', () => {
-  it('a defender that flips a Heart card and wins may put a hand card face down in place of a revealed Value', () => {
+  it('(old trigger) a defender that flips a Heart card and wins may put a hand card face down in place of a revealed Value', () => {
+    RULES.changeTrigger = 'defender'
     let s = table({ field: [['SOFA-002'], ['SOFA-001']], hand: [[], ['SOFA-004']], memories: [[], ['SOFA-028', 'SOFA-028', 'SOFA-028']] })
     s.players[1].essenceStack[0].up = true
     s.players[1].essence = 4
@@ -220,5 +221,25 @@ describe('V2.4: Change of Values', () => {
     expect(s.players[1].essenceStack[0].c.cardId).toBe('SOFA-004')
     expect(s.players[1].thoughts.some((c) => c.uid === back)).toBe(true)
     expect(s.players[1].essence).toBe(5)
+    RULES.changeTrigger = 'chant'
+  })
+
+  it('completing the Chant lets you hide a revealed Value: swap it with a hand card, or turn it back face down', () => {
+    let s = table({ hand: [['SI-C03', 'SOFA-004'], []], chants: [['SI-C01', 'SI-C01'], []], memories: [['SOFA-001', 'SOFA-002', 'SOFA-003'], []] })
+    s.players[0].essenceStack[0].up = true
+    s.players[0].essence = 4
+    s.players[0].lost = 1
+    s = chant(s, 'SI-C03')
+    expect(s.players[0].chants).toHaveLength(0)
+    expect(s.choices[0]?.effect).toBe('cov1')
+    const v = s.players[0].essenceStack[0].c
+    let a = reduce(s, { t: 'choose', player: 0, picks: [v.uid] })
+    const b = reduce(a, { t: 'choose', player: 0, picks: [] })
+    expect(b.players[0].essenceStack[0]).toEqual({ c: v, up: false })
+    expect(b.players[0].essence).toBe(5)
+    a = reduce(a, { t: 'choose', player: 0, picks: [inHand(a, 'SOFA-004').uid] })
+    expect(a.players[0].essenceStack[0].c.cardId).toBe('SOFA-004')
+    expect(a.players[0].essenceStack[0].up).toBe(false)
+    expect(a.players[0].thoughts.some((c) => c.uid === v.uid)).toBe(true)
   })
 })

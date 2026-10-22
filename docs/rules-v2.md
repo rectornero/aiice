@@ -124,3 +124,12 @@ When your Chant completes (the 3rd Word lands), you may make one Change of Value
 | F | 45.6% | 51.2% | 54.9% | 16.1 | 3.93 | 0.45 | 1.17 |
 | v2.4 +6 | 45.4% | 52.0% | 49.1% | 15.2 | 3.71 | 0.01 | 1.22 |
 | F +6 | 45.1% | 52.3% | 49.6% | 15.6 | 3.86 | 0.49 | 1.23 |
+
+## v2.5: Change of Values from the Chant (Nero, 2026-10-22, rulebook §7). App default
+
+When your Chant completes, you may hide one revealed Value. Either swap it with a card from Thoughts, which goes in face down, or turn the same Value back face down (no card needed). The defender-♥ trigger is gone (RULES.changeTrigger = 'chant').
+
+| rules | Music | Fate | 1st player | turns | winner's face-down Values | Changes / game | Chants / game |
+|---|---|---|---|---|---|---|---|
+| v2.5 | 44.8% | 51.8% | 55.7% | 16.3 | 3.98 | 0.55 | 1.17 |
+| v2.5 +6 | 44.8% | 52.3% | 49.3% | 15.8 | 3.91 | 0.59 | 1.23 |

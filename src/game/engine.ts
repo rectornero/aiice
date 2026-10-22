@@ -62,8 +62,8 @@ export const RULES = {
   changeOnTie: false,
   /** candidate: an attacker that touches may also make a Change of Values */
   changeForAttacker: false,
-  /** where Change of Values comes from: a defender's ♥ win (v2.4) or completing your Chant (candidate F) */
-  changeTrigger: 'defender' as 'defender' | 'chant',
+  /** where Change of Values comes from: completing your Chant (Nero's pick, rulebook §7) or a defender's ♥ win (old v2.4) */
+  changeTrigger: 'chant' as 'defender' | 'chant',
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */

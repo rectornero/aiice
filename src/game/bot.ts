@@ -182,7 +182,13 @@ function smartPicks(s: GameState, ch: PendingChoice): string[] {
   }
   // Change of Values: always take the best revealed Value back, then bury the weakest card in hand
   if (ch.effect === 'cov1') return [...ch.options].sort((a, b) => val(b) - val(a)).slice(0, max)
-  if (ch.effect === 'cov2') return [...ch.options].sort((a, b) => val(a) - val(b)).slice(0, max)
+  if (ch.effect === 'cov2') {
+    const worst = [...ch.options].sort((a, b) => val(a) - val(b)).slice(0, max)
+    // with the Chant trigger a pick is optional: swap only when the revealed Value is worth more in hand
+    if (ch.min > 0) return worst
+    const back = String(ch.data?.value ?? '').split(',')
+    return worst.filter((uid, i) => back[i] && val(back[i]) > val(uid) + 1)
+  }
   const ranked = [...ch.options].sort((a, b) => (harmful ? val(a) - val(b) : val(b) - val(a)))
   return ranked.slice(0, harmful ? min : max)
 }

@@ -13,7 +13,7 @@
 | **defender** | If the opponent imagines a defender, your attacks must target a defender. | Classic, readable. |
 | **ill-fated fades** | ill-fated wears off at the end of its owner's turn. | Breaks the Raiden → Noboru two-turn board wipe; the combo now needs both cards in the same turn. |
 | **Comeback draw** | If you imagine no Entity at the start of your turn, you draw 2 instead of 1. | Softens the "empty board = lost game" snowball and evens out going first. |
-| **Values and Heart** (v2.1, Nero 2026-10-22) | Essence is now **5 Values and 1 Heart**: at setup, 5 cards from your Memories go face down as your Values. Each hit ("I Dream your Value!") reveals one. Once per turn, in your Main step, you can swap a revealed Value with a card in your Thoughts. A hit when no Value is face down reaches the Heart: you lose. | Essence becomes cards (no extra pieces), and taking hits gives you options. |
+| **Values and Heart** (v2.1, Nero 2026-10-22) | Your **Essence** is a stack of **5 Values and 1 Heart**: at setup, 5 cards from your Memories go face down as your Values. When an attack reaches the player ("Camelia reaches the Essence!"), the attacker says "I Dream your Value!" and one Value is revealed. Once per turn, in your Main step, you can swap a revealed Value with a card in your Thoughts. A hit when no Value is face down reaches the Heart: you lose. | Essence becomes cards (no extra pieces), and taking hits gives you options. |
 | Unchanged | 5-card hand, draw 1, Chapter 1 starts a Story, sure hit or flip, ties do nothing, direct attack only into an empty board. | |
 
 Card types stay three: Entity, Word, Relic (Nero, 2026-10-22: Chant is the chain, Word is the spell). Dreaming Violinist and Kazuki remember a Word of the given Echo.

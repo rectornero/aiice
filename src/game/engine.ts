@@ -584,7 +584,7 @@ function step(s: GameState, a: Action): boolean {
         // HOUSE RULE (playtest-01): a direct attack is only possible when the opponent imagines no Entity.
         if (s.players[foe].stories.length > 0) return false
         story.attackedTurn = s.turn
-        log(s, `${cardName(card(atk))} attacks ${s.players[foe].name} directly: “I Dream your Value!”`)
+        log(s, `${card(atk).name} reaches ${s.players[foe].name}'s Essence! “I Dream your Value!”`)
         loseEssence(s, foe)
         return true
       }

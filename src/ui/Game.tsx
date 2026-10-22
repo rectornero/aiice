@@ -275,7 +275,7 @@ function PlayerArea({ s, p, mine, sel, glow, clickStory, openPile, clickChant }:
     <section className={`area ${mine ? 'mine' : 'theirs'} ${s.active === p ? 'active' : ''}`}>
       <div className="area-head">
         <div className="pname">{pl.name}{s.active === p && ' ●'}</div>
-        <button type="button" className="essence" title={`Values: ${pl.essence} face down, ${pl.lost} revealed, then the Heart. Tap to see them.`} onClick={() => openPile('essence')}>
+        <button type="button" className="essence" title={`Essence: ${pl.essence} Values face down, ${pl.lost} revealed, then the Heart. Tap to see them.`} onClick={() => openPile('essence')}>
           {Array.from({ length: pl.essence }, (_, i) => <span key={i} className="ess on">◆</span>)}
           {Array.from({ length: pl.lost }, (_, i) => <span key={`l${i}`} className="ess off" title="revealed Value">◇</span>)}
           <span className="ess heart" title="Heart">♥</span>
@@ -448,7 +448,7 @@ function StoryActions({ s, me, owner, story, canPlay, act, done }: {
   )
 }
 
-/** The Values stack: face-down cards are hidden, revealed ones are public. Swap from a card in your Thoughts. */
+/** The Essence (stack of Values): face-down cards are hidden, revealed ones are public. Swap from a card in your Thoughts. */
 function EssenceModal({ s, me, player, act, close }: {
   s: GameState; me: PlayerIdx; player: PlayerIdx; act: (a: Action) => void; close: () => void
 }) {
@@ -457,7 +457,7 @@ function EssenceModal({ s, me, player, act, close }: {
     <div className="overlay" onClick={close}>
       <div className="dialog wide" onClick={(e) => e.stopPropagation()}>
         <div className="row between gap">
-          <h2>{pl.name}'s Values</h2>
+          <h2>{pl.name}'s Essence</h2>
           <button className="btn ghost" onClick={close}>Close</button>
         </div>
         <p className="muted small">

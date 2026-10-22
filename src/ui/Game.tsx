@@ -329,7 +329,7 @@ function StoryView({ s, st, glow, selected, onClick }: { s: GameState; st: Story
     <div className={`story ${glow ?? ''}`}>
       {(st.cards.length > 1 || !!st.lost?.length) && (
         <div className="story-depth">
-          {st.lost?.map((c) => <span key={c.uid} className="lost" title="lost Chapter (face down)">✕</span>)}
+          {st.lost?.map((c) => <span key={c.uid} className="lost" title="read Chapter (face down)">✕</span>)}
           {st.cards.slice(0, -1).map((c) => <span key={c.uid}>Ch{card(c).chapter}</span>)}
         </div>
       )}

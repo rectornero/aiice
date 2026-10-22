@@ -346,3 +346,4 @@ button.essence:hover, button.essence:focus-visible { background: rgba(79, 179, 2
 @keyframes call-beat { 50% { transform: scale(1.15); } }
 @media (prefers-reduced-motion: reduce) { .call-line, .call-card, .call-heart { animation: none; } }
 @media (max-width: 820px) { .call-line.l0 { font-size: 18px; } .call-line.l1 { font-size: 24px; } }
+.heart-mark { color: #e0457b; margin-left: 2px; }

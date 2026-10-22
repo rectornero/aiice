@@ -60,3 +60,20 @@ Value cards come out of the 20-card deck, which cost Music a few percent; its st
 |---|---|---|---|---|---|---|---|---|
 | v2.1 | 42.7% | 54.1% | 3.2% | 55.5% | 18.5 | 4.20 | 100% of decided | 0 |
 | v2.2 | 44.1% | 51.9% | 4.0% | 55.9% | 18.1 | 4.09 | 100% of decided | 1.48 |
+
+Wording (Nero): a beaten Entity is **read**, not deleted. A read Entity with a Chapter under it becomes a read Chapter, and a lone Chapter 1 is forgotten. Card texts still say "deleted" for now.
+
+## v2.3: Memories that touch (Nero, 2026-10-22, rulebook §9)
+
+Some cards carry a ♥ next to their Fate stars. An attacker that flips, wins the fight, and shows at least one ♥ among its flips also reaches the defender's Essence (reveal 1 Value), once per fight. A sure hit can't touch. Only the attacker can touch.
+
+Sim, 1000 games each, on top of v2.2. The ♥ goes on the same spread of cards in each deck: 3 = Sparkle Keys ×2 + Earthy Strums / Takeshi ×2 + Hikari; 5 adds Pyrothump ×2 / Noboru ×2; 7 adds Rising Chorus ×2 / Twist of Fate ×2.
+
+| ♥ cards per deck | Music | Fate | draws | 1st player | turns | winner's face-down Values | laid bare / game | touches / game | attackers flip |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 (v2.2) | 44.1% | 51.9% | 4.0% | 55.9% | 18.1 | 4.09 | 1.48 | 0 | 14% |
+| 3 | 44.0% | 53.3% | 2.7% | 54.0% | 15.8 | 3.87 | 1.19 | 1.54 | 33% |
+| 5 (app default) | 43.8% | 53.3% | 2.9% | 53.9% | 15.7 | 3.74 | 1.09 | 2.01 | 39% |
+| 7 | 45.1% | 52.5% | 2.4% | 53.5% | 14.9 | 3.62 | 0.98 | 2.60 | 45% |
+
+Every decided game ends on the Heart.

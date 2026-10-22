@@ -186,3 +186,20 @@ describe('V2.2: lost Chapters and a Story laid bare', () => {
     expect(s.players[1].essenceStack.filter((e) => e.up)).toHaveLength(0)
   })
 })
+
+describe('V2.3: Memories that touch', () => {
+  it('an attacker that flips a Heart card and wins also reveals 1 Value', () => {
+    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [['SOFA-028', 'SOFA-028', 'SOFA-028'], []] })
+    s = fight(s, 'SOFA-001', 'SOFA-002', ['flip', 'sure'])
+    expect(s.lastFight?.outcome).toBe('attacker')
+    expect(s.players[1].essenceStack.filter((e) => e.up)).toHaveLength(1)
+    expect(s.lastHit?.how).toBe('touch')
+  })
+
+  it('a sure hit cannot touch', () => {
+    let s = table({ field: [['SOFA-001'], ['SOFA-002']], memories: [['SOFA-028', 'SOFA-028', 'SOFA-028'], []] })
+    s = fight(s, 'SOFA-001', 'SOFA-002', ['sure', 'sure'])
+    expect(s.lastFight?.outcome).toBe('attacker')
+    expect(s.players[1].essenceStack.filter((e) => e.up)).toHaveLength(0)
+  })
+})

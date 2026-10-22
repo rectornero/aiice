@@ -46,10 +46,13 @@ export const RULES = {
   /** V2.1 (Nero, 2026-10-22): "5 Values and one Heart". Essence is now called Values; with no face-down Value left,
    *  the next hit reaches the Heart and ends the game. Off: you lose when the last Value is lost. */
   heart: true,
-  /** V2.2 (Nero, 2026-10-22, rulebook §6): a deleted Entity with a Chapter under it goes face down under its Story
-   *  (a lost Chapter). Deleting the last face-up Entity of an opponent's Story with lost Chapters lays it bare:
+  /** V2.2 (Nero, 2026-10-22, rulebook §6): a beaten (read) Entity with a Chapter under it goes face down under its Story
+   *  (a read Chapter). Reading the last face-up Entity of an opponent's Story with read Chapters lays it bare:
    *  the Story empties and reaches its owner's Essence (reveal 1 Value). */
   storyLaidBare: true,
+  /** V2.3 "Memories that touch" (Nero, 2026-10-22, rulebook §9): an attacker that wins a fight in which it flipped
+   *  at least one Heart-marked card also reaches the defender's Essence (reveal 1 Value), once per fight. */
+  memoriesTouch: true,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -97,7 +100,7 @@ export interface Story {
   /** last turn this Story was started or continued (each Story moves once per turn) */
   movedTurn: number
   attackedTurn: number
-  /** V2.2: lost Chapters, face down under the Story */
+  /** V2.2: read Chapters, face down under the Story */
   lost?: CardInst[]
 }
 
@@ -173,6 +176,8 @@ export interface EssenceHit {
   /** card ids of the Values revealed by this hit */
   revealed: string[]
   heart: boolean
+  /** how it got there: a laid-bare Story or Memories that touch (otherwise an attack or an effect) */
+  how?: 'bare' | 'touch'
 }
 
 export interface GameState {
@@ -416,10 +421,11 @@ export function canSwapEssence(s: GameState, p: PlayerIdx, essenceUid: string, h
 }
 
 /** The player takes n hits: each reveals a face-down Value; a hit with none left reaches the Heart and ends the game. */
-export function loseEssence(s: GameState, p: PlayerIdx, n = 1, source?: string) {
+export function loseEssence(s: GameState, p: PlayerIdx, n = 1, source?: string, how?: EssenceHit['how']) {
   const pl = s.players[p]
   const hit: EssenceHit = { seq: (s.lastHit?.seq ?? 0) + 1, player: p, revealed: [], heart: false }
   if (source) hit.source = source
+  if (how) hit.how = how
   s.lastHit = hit
   for (let i = 0; i < n && s.winner === null; i++) {
     if (pl.essence <= 0) {
@@ -461,10 +467,15 @@ export function removeTop(s: GameState, p: PlayerIdx, storyId: string, byFoe = f
   if (!story) return
   const gone = story.cards.pop()!
   delete s.mods[gone.uid]
-  log(s, `${cardName(card(gone))} is deleted.`)
-  // V2.2 (rulebook §6): the Story falls back a Chapter; the deleted Entity stays under it as a lost Chapter.
-  if (RULES.storyLaidBare && story.cards.length > 0) (story.lost ??= []).push(gone)
-  else pl.discard.push(gone)
+  // V2.2 (rulebook §6, Nero: "we don't delete"): a beaten Entity is read. The Story falls back a Chapter and the
+  // Entity stays under it face down as a read Chapter; with no Chapter under it, it is forgotten.
+  if (RULES.storyLaidBare && story.cards.length > 0) {
+    ;(story.lost ??= []).push(gone)
+    log(s, `${cardName(card(gone))} is read: it turns face down under its Story.`)
+  } else {
+    pl.discard.push(gone)
+    log(s, `${cardName(card(gone))} is read and forgotten.`)
+  }
   if (story.cards.length > 0) return
   pl.stories = pl.stories.filter((st) => st.id !== storyId)
   const lost = story.lost ?? []
@@ -473,7 +484,7 @@ export function removeTop(s: GameState, p: PlayerIdx, storyId: string, byFoe = f
   story.lost = []
   if (byFoe && s.winner === null) {
     log(s, `${pl.name}'s Story is laid bare: it reaches ${pl.name}'s Essence!`)
-    loseEssence(s, p, 1, `${cardName(card(gone))}'s Story`)
+    loseEssence(s, p, 1, `${cardName(card(gone))}'s Story`, 'bare')
   }
 }
 
@@ -782,6 +793,10 @@ function findOnField(s: GameState, uid: string): CardInst | null {
   return null
 }
 
+/** V2.3: cards with a Heart mark next to their Fate stars. Card data sets `heart: true`; the simulator can add ids here. */
+export const HEART_MARKS = new Set<string>()
+export const hasHeartMark = (c: CardInst) => !!card(c).heart || HEART_MARKS.has(c.cardId)
+
 function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): FightSide {
   const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
   if (mode === 'sure') {
@@ -811,6 +826,10 @@ function resolveFight(s: GameState) {
   const loser = outcome === 'attacker' ? defender : outcome === 'defender' ? attacker : null
   const deleted = loser ? destroy(s, loser.card.uid) : false
   if (!loser) log(s, 'Tie: both Entities survive.')
+  if (RULES.memoriesTouch && outcome === 'attacker' && s.winner === null && attacker.flipped.some(hasHeartMark)) {
+    log(s, `${cardName(card(attacker.card))}'s Memories touch ${s.players[defender.player].name}: “I Dream your Value!”`)
+    loseEssence(s, defender.player, 1, cardName(card(attacker.card)), 'touch')
+  }
   if (loser && RULES.fightLossCostsEssence && s.winner === null) {
     log(s, `${s.players[loser.player].name} lost the fight: they take a hit.`)
     loseEssence(s, loser.player, 1, card(loser === attacker ? defender.card : attacker.card).name)

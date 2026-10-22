@@ -47,6 +47,8 @@ export interface Card {
   flavor?: string
   rarity?: string
   image?: string
+  /** V2.3: Heart mark next to the Fate stars ("Memories that touch") */
+  heart?: boolean
   /** true for cards whose name or text is still a placeholder in Figma */
   placeholder?: boolean
 }
@@ -55,9 +57,9 @@ export const CARDS: Card[] = [
   // ---- Music ----
   { id: 'SOFA-001', icon: 'mermaid', name: 'Aqua Beat', title: 'Drumming Mermaid', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 3', fate: 1, sure: 2, stars: 0,
     text: '[B]: brave [3 turns]', flavor: 'Yes! I can do it, I know! I won’t ever give up!', image: sofa001 },
-  { id: 'SOFA-002', icon: 'grand-piano', name: 'Sparkle Keys', title: 'Radiant Pianist', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 1,
+  { id: 'SOFA-002', heart: true, icon: 'grand-piano', name: 'Sparkle Keys', title: 'Radiant Pianist', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 1,
     text: '[B]: Remember 1 Entity [Domain: Music, Chapter: 2]', flavor: 'I want to learn the piano... teach me.', image: sofa002 },
-  { id: 'SOFA-003', icon: 'guitar', name: 'Earthy Strums', title: 'Natural Guitarist', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 2, uses: 1,
+  { id: 'SOFA-003', heart: true, icon: 'guitar', name: 'Earthy Strums', title: 'Natural Guitarist', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 2, uses: 1,
     text: '[O]: {1} resonant → 1 Entity [Domain: Music]', flavor: 'I don’t want anyone to be hurt..!', image: sofa003 },
   { id: 'SOFA-004', icon: 'violin', name: 'Dreaming Violinist', title: '(name to come)', type: 'Entity', domain: 'Music', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 2, placeholder: true,
     text: '[B]: Remember 1 Word [Domain: Music, Echo: 1]', flavor: 'My dream is playing all together... it feels like love...', image: sofa004 },
@@ -67,7 +69,7 @@ export const CARDS: Card[] = [
     text: 'While imagined: gets +1 for each resonant Entity you are imagining.', flavor: 'A great performance can be achieved only if we’re all as prepared.' },
   { id: 'SOFA-M02', icon: 'guitar-bass-head', name: 'Rhythmic Inferno', title: 'Flametongue Bassist', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 2, stars: 1,
     text: 'While imagined: give +1 to all other Music Entities that are resonant and brave.', flavor: 'Woohoo! We’re gonna ball, guys... better be ready!' },
-  { id: 'SOFA-M03', icon: 'drum', name: 'Pyrothump', title: 'Inferno Drummer', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 3, stars: 0,
+  { id: 'SOFA-M03', heart: true, icon: 'drum', name: 'Pyrothump', title: 'Inferno Drummer', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 3, stars: 0,
     text: '(no ability)', flavor: 'Hey, you, wassup? Stop standing there, and come rock with us!' },
   { id: 'SOFA-M04', icon: 'harp', name: 'Aqua Serenade', title: 'Seraphic Violinist', type: 'Entity', domain: 'Music', chapter: 2, fate: 2, sure: 2, stars: 2,
     text: 'While imagined: give any Music “Pianist” brave and fate-favored. When deleted: all your resonant Entities get +1.', flavor: 'I can’t say it with words... ...I’ll tell you with music.' },
@@ -80,7 +82,7 @@ export const CARDS: Card[] = [
   // ---- Fate ----
   { id: 'SOFA-024', icon: 'raven', name: 'Familiar Raiden', title: 'Thundering Tower Raven', type: 'Entity', domain: 'Fate', chapter: 1, die: 'd4 2', fate: 1, sure: 1, stars: 2, rarity: 'Common',
     text: '[B]: ill-fated → ~2 opponent’s Entities', flavor: 'There’s no blade that cuts through misfortune.', image: raiden },
-  { id: 'SOFA-025', icon: 'lion', name: 'Familiar Takeshi', title: 'Majestic Emperor Lion', type: 'Entity', domain: 'Fate', chapter: 1, die: 'd4 3', fate: 1, sure: 2, stars: 1, rarity: 'Common',
+  { id: 'SOFA-025', heart: true, icon: 'lion', name: 'Familiar Takeshi', title: 'Majestic Emperor Lion', type: 'Entity', domain: 'Fate', chapter: 1, die: 'd4 3', fate: 1, sure: 2, stars: 1, rarity: 'Common',
     text: '[B]: fate-favored → 1 other Entity', flavor: 'Fate favors the brave! Rally with me!', image: takeshi },
   { id: 'SOFA-F01', icon: 'hound', name: 'Familiar Kuro', title: 'Infernal Devil Hound', type: 'Entity', domain: 'Fate', chapter: 1, fate: 1, sure: 1, stars: 1,
     text: 'After a fight: give the Entity this card attacked ill-fated. If this Entity defeats an Entity, it gets +1.', flavor: 'Whether you win or lose, hell will find you soon...' },
@@ -89,10 +91,10 @@ export const CARDS: Card[] = [
   { id: 'SOFA-027', icon: 'devil-mask', name: 'Kurogane Ikazuchi', title: 'Devil’s Adept', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd4 2', fate: 1, sure: 2, stars: 1, rarity: 'Rare',
     text: 'While imagined: if this Entity is about to be deleted, you instead lose 1 Value. During a fight: if this Entity deletes an Entity, disperse 1 revealed Value: it gets +1.',
     flavor: 'Death? I am no stranger to it. I witness it every time one like you falls.', image: kurogane },
-  { id: 'SOFA-028', icon: 'polar-star', name: 'Hikari Mizuki', title: 'Blessed by the Star', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd4 2', fate: 1, sure: 1, stars: 2, rarity: 'Rare',
+  { id: 'SOFA-028', heart: true, icon: 'polar-star', name: 'Hikari Mizuki', title: 'Blessed by the Star', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd4 2', fate: 1, sure: 1, stars: 2, rarity: 'Rare',
     text: 'When instanced: all your Entities can’t be deleted until the end of your next turn. While imagined: all your Entities get fate-favored (if they have it, +2 instead).',
     flavor: 'May the Star bless this city... and our valiant warriors protect it.', image: hikari },
-  { id: 'SOFA-029', icon: 'samurai-helmet', name: 'Noboru Amano', title: 'Fallen Tower Samurai', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd6 4', fate: 2, sure: 2, stars: 0, rarity: 'Rare',
+  { id: 'SOFA-029', heart: true, icon: 'samurai-helmet', name: 'Noboru Amano', title: 'Fallen Tower Samurai', type: 'Entity', domain: 'Fate', chapter: 2, die: 'd6 4', fate: 2, sure: 2, stars: 0, rarity: 'Rare',
     text: 'When instanced: give ill-fated to all opponent’s Entities; those that already have it are deleted instead. When deleted: one of your Entities gets fate-favored.',
     flavor: 'The source of my power... will kill me, one day.', image: noboru },
   { id: 'SOFA-F03', icon: 'katana', name: 'Seiji Tenno', title: 'The Samurai Emperor', type: 'Entity', domain: 'Fate', chapter: 2, fate: 2, sure: 3, stars: 0,

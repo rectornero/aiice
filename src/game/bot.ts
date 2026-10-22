@@ -6,7 +6,7 @@
 import { CARD_BY_ID, type Card } from './cards'
 import { whoMustAct, type BotPolicy } from './driver'
 import {
-  attackTargets, canActivate, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
+  attackTargets, canActivate, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, hasHeartMark, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
   type Action, type CardInst, type FightMode, type GameState, type PendingChoice, type PlayerIdx, type Story,
 } from './engine'
 
@@ -89,6 +89,17 @@ function strength(s: GameState, p: PlayerIdx, c: CardInst) {
   return Math.max(sureOf(s, c), flipsFor(s, c) * avgStars(s, p)) + powerBonus(s, c.uid)
 }
 
+/** What revealing one of a player's Values is worth to the opponent. */
+const essenceWorth = (s: GameState, p: PlayerIdx) => (s.players[p].essence <= 0 ? 100 : 12 / (s.players[p].essence + 1) + 2)
+
+/** Chance that flipping `flips` cards from Memories shows at least one Heart mark. */
+function touchChance(s: GameState, p: PlayerIdx, flips: number) {
+  const mem = s.players[p].memories
+  const h = mem.filter(hasHeartMark).length
+  const k = Math.min(flips, mem.length)
+  return mem.length ? 1 - binom(mem.length - h, k) / binom(mem.length, k) : 0
+}
+
 /** How much a player values the top of this Story (what deleting it costs them). */
 function storyValue(s: GameState, p: PlayerIdx, st: Story) {
   const c = topOf(st)
@@ -102,7 +113,7 @@ function storyValue(s: GameState, p: PlayerIdx, st: Story) {
   // losing your last Entity opens you to direct attacks
   if (st.cards.length === 1 && s.players[p].stories.length === 1) v += 3
   // V2.2: a Story laid bare reaches the Essence
-  if (RULES.storyLaidBare && st.cards.length === 1 && st.lost?.length) v += s.players[p].essence <= 0 ? 100 : 12 / (s.players[p].essence + 1) + 2
+  if (RULES.storyLaidBare && st.cards.length === 1 && st.lost?.length) v += essenceWorth(s, p)
   return v
 }
 
@@ -110,13 +121,15 @@ function storyValue(s: GameState, p: PlayerIdx, st: Story) {
 function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: PlayerIdx; st: Story }) {
   const vA = storyValue(s, atk.p, atk.st)
   const vD = storyValue(s, def.p, def.st)
+  // V2.3: winning a flip with a Heart-marked card also reveals a Value
+  const touch = RULES.memoriesTouch ? touchChance(s, atk.p, flipsFor(s, topOf(atk.st))) * essenceWorth(s, def.p) : 0
   let best = { mode: 'sure' as FightMode, ev: -Infinity }
   for (const ma of MODES) {
     const da = sideDist(s, atk.p, topOf(atk.st), ma, 'attacker')
     let worst = Infinity
     for (const md of MODES) {
       const o = odds(da, sideDist(s, def.p, topOf(def.st), md, 'defender'))
-      worst = Math.min(worst, o.win * vD - o.lose * vA)
+      worst = Math.min(worst, o.win * (vD + (ma === 'flip' ? touch : 0)) - o.lose * vA)
     }
     if (worst > best.ev) best = { mode: ma, ev: worst }
   }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { botPolicyFor } from './game/bot'
+import { extraDeckFor } from './game/cards'
 import { allDecks, validateDeck, type Deck } from './game/decks'
 import type { MatchSetup, SeatKind } from './game/driver'
 import { newGame } from './game/engine'
@@ -8,6 +9,7 @@ import { Game } from './ui/Game'
 import { Library } from './ui/Library'
 import { Lobby } from './ui/Lobby'
 import { ArtContext } from './ui/CardView'
+import { loadAutoAdvance, saveAutoAdvance } from './ui/settings'
 import { ICON_CREDITS } from './assets/icons/icons'
 
 type Screen =
@@ -43,6 +45,7 @@ export function App() {
 }
 
 function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
+  const [autoAdvance, setAutoAdvance] = useState(loadAutoAdvance)
   const [screen, setScreen] = useState<Screen>({ kind: 'menu' })
   const [names, setNames] = useState<[string, string]>(['Player 1', 'Player 2'])
   const [deckIds, setDeckIds] = useState<[string, string]>(['music', 'fate'])
@@ -54,7 +57,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
   if (screen.kind === 'decks') return <DeckBuilder onBack={menu} />
 
   // Only decks that pass the deck rules can be played.
-  const decks = allDecks().filter((d) => validateDeck(d.cards).ok)
+  const decks = allDecks().filter((d) => validateDeck(d.cards, d.subconscious).ok)
   const deckOf = (id: string): Deck => decks.find((d) => d.id === id) ?? decks[0]
   if (screen.kind === 'online') {
     return <Lobby decks={decks} onBack={menu} onStart={(setup) => setScreen({ kind: 'game', setup, key: Date.now() })} />
@@ -64,6 +67,7 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
     const initial = newGame({
       seed: Math.floor(Math.random() * 2 ** 31),
       decks: [deckOf(deckIds[0]).cards, deckOf(deckIds[1]).cards],
+      extras: [extraDeckFor(deckOf(deckIds[0]).cards, deckOf(deckIds[0]).subconscious), extraDeckFor(deckOf(deckIds[1]).cards, deckOf(deckIds[1]).subconscious)],
       names: vsBot ? [names[0], `Bot (${level})`] : names,
     })
     const seats: [SeatKind, SeatKind] = vsBot ? ['local', 'bot'] : ['local', 'local']
@@ -113,18 +117,25 @@ function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
             <option value="figma">Figma scans (where they exist)</option>
           </select>
         </label>
+        <label className="row gap small muted">
+          <input type="checkbox" checked={autoAdvance} onChange={(e) => { setAutoAdvance(e.target.checked); saveAutoAdvance(e.target.checked) }} />
+          Auto-continue after calls and fights
+        </label>
       </div>
 
       <details className="panel rules">
         <summary>How this table plays (rules used)</summary>
         <ul>
-          <li>5 Essence each, 5 cards in Thoughts, draw 1 per turn (the first player skips turn 1's draw). If you imagine no Entity at the start of your turn, draw 2.</li>
+          <li>5 Values and 1 Heart each, 5 cards in Thoughts (the second player draws 6), draw 1 per turn (the first player skips turn 1's draw). If you imagine no Entity at the start of your turn, draw 2.</li>
           <li><b>Each player has two rows of 3 slots:</b> Stories (Entities) and your <b>Chant</b>, a row of green <b>Word</b> cards.</li>
           <li><b>Main:</b> imagine a Chapter 1 Entity to start a Story (max 3), or put the next Chapter on top of a Story. Each Story moves once per turn.</li>
           <li>Add one <b>Word</b> per turn to your Chant. Its top-right number is its <b>Echo</b>: Echo 2 needs 1 Word already in your Chant, Echo 3 needs 2. When the 3rd Word lands, the Chant is complete and all its Words are forgotten.</li>
-          <li><b>Fight:</b> each imagined Entity attacks once, not on the turn its Story started. Both players choose: <b>sure hit</b>, or <b>flip</b> Fate cards from Memories and count ★. Higher total wins; the loser is deleted. Ties: nothing happens.</li>
-          <li><b>Traits:</b> brave +1 when attacking · charming +1 when defending · defender must be attacked first · pacifist can't attack · fate-favored flips 1 more · ill-fated flips 1 fewer and wears off at the end of its owner's turn.</li>
-          <li>If the opponent imagines no Entity, attack them directly: they lose 1 Essence. 0 Essence = you lose.</li>
+          <li><b>Fight:</b> each imagined Entity attacks once, not on the turn its Story started. Both players choose: <b>sure hit</b>, or <b>flip</b> Fate cards from Memories and count ★. Higher total wins; the loser is <b>read</b> (card texts still say “deleted”). A tie between a sure hit and a flip goes to the sure hit; other ties: nothing happens.</li>
+          <li><b>Traits:</b> brave +1 when attacking · charming +1 when defending · defender must be attacked first · pacifist can't attack · fated flips 1 more · starless flips 1 fewer and wears off at the end of its owner's turn.</li>
+          <li><b>Essence</b>: your stack of 5 face-down <b>Values</b> (cards from your Memories), with your <b>Heart</b> behind them. If the opponent imagines no Entity, attack them directly: “Camelia reaches the Essence!”, then “I Dream your Value!”, and they reveal 1 Value. Once per turn you can swap a revealed Value with a card in your Thoughts. A hit when no Value is face down reaches the Heart: “I Dream the Heart of your Music!”, and that player loses.</li>
+          <li><b>Running out</b> (v2.7): each deck has a 10-card <b>Subconscious</b> set aside. When your Memories run out, it becomes your Memories. If your Memories hold fewer cards than you must flip, flip the rest from the top of your Subconscious; they go to its bottom. After that, each draw takes a face-down Value from your Essence into your Thoughts. With nothing left to draw, you share your Heart and lose.</li>
+          <li><b>Read Chapters</b> (v2.2): a read Entity falls back a Chapter and stays face down under its Story (✕); a lone Chapter 1 is forgotten. Read the last face-up Entity of a Story with read Chapters and the Story is <b>laid bare</b>: it empties and reaches its owner's Essence (reveal 1 Value).</li>
+          <li><b>Memories that touch</b> (v2.3): some cards carry a ♥ next to their Fate stars. If you attack, flip, and win with at least one ♥ card among your flips, you also reach the opponent's Essence (reveal 1 Value), once per fight. A sure hit flips nothing, so it can't touch.</li>
           <li>Card art is a placeholder from game-icons.net (CC BY 3.0, credits in the repo). Fate, sure hit and ★ values are still provisional.</li>
         </ul>
       </details>

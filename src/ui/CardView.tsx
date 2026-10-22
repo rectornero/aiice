@@ -1,3 +1,4 @@
+import { HEART_MARKS } from '../game/engine'
 import { createContext, useContext, type ReactNode } from 'react'
 import { ICONS } from '../assets/icons/icons'
 import { cardName, type Card } from '../game/cards'
@@ -77,12 +78,12 @@ export function CardView({ card, size = 'md', selected, dim, onClick, badge, ext
               <>
                 <span className="fate" title="Fate: cards flipped">⟲{card.fate}</span>
                 <span className="sure" title="Sure hit">{card.sure}</span>
-                <Stars n={card.stars} />
+                <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}
               </>
             ) : (
               <>
                 {!tile && <span className="kind">{card.type === 'Word' ? `Echo ${card.echo ?? 1}` : card.type}</span>}
-                <Stars n={card.stars} />
+                <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}
               </>
             )}
           </div>
@@ -122,13 +123,13 @@ export function CardDetails({ card }: { card: Card }) {
         <div className="statline">
           <span><b>Fate</b> {card.fate}</span>
           <span><b>Sure hit</b> {card.sure}</span>
-          <span><b>Stars</b> <Stars n={card.stars} /></span>
+          <span><b>Stars</b> <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}</span>
         </div>
       )}
       {card.type === 'Word' && (
         <div className="statline">
           <span><b>Echo</b> {card.echo ?? 1}: needs {(card.echo ?? 1) - 1} Word{card.echo === 2 ? '' : 's'} already in your Chant</span>
-          <span><b>Stars</b> <Stars n={card.stars} /></span>
+          <span><b>Stars</b> <Stars n={card.stars} />{(card.heart || HEART_MARKS.has(card.id)) && <span className="heart-mark" title="Heart mark: Memories that touch">♥</span>}</span>
         </div>
       )}
       <p className="ctext"><CardText text={card.text} /></p>

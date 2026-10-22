@@ -14,8 +14,10 @@ const sameCards = (a: string[], b: string[]) => a.length === b.length && sortCar
 /** The deck being edited. `saved` is what's stored (null = never saved). */
 interface Draft extends Deck { saved: Deck | null }
 
-const open = (d: Deck): Draft => ({ ...d, cards: [...d.cards], saved: d })
-const blank = (): Draft => ({ id: newDeckId(), name: 'New deck', cards: [], saved: null })
+const open = (d: Deck): Draft => ({ ...d, cards: [...d.cards], subconscious: [...(d.subconscious ?? [])], saved: d })
+const blank = (): Draft => ({ id: newDeckId(), name: 'New deck', cards: [], subconscious: [], saved: null })
+/** which part of the deck taps add to */
+type Part = 'main' | 'sub'
 
 export function DeckBuilder({ onBack }: { onBack: () => void }) {
   const [decks, setDecks] = useState<Deck[]>(allDecks)
@@ -24,16 +26,20 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
   const [sel, setSel] = useState<Card | null>(null)
   const [msg, setMsg] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [part, setPart] = useState<Part>('main')
   const [importText, setImportText] = useState('')
   const codeRef = useRef<HTMLTextAreaElement>(null)
   const deckRef = useRef<HTMLDivElement>(null)
 
   const pool = filterCards(CARDS, filter, 'chapter').sort((a, b) => +!playable(a) - +!playable(b)) // unplayable types last
+  const sub = draft.subconscious ?? []
   const counts = useMemo(() => countCards(draft.cards), [draft.cards])
-  const check = useMemo(() => validateDeck(draft.cards), [draft.cards])
+  const subCounts = useMemo(() => countCards(sub), [sub])
+  const total = (id: string) => (counts.get(id) ?? 0) + (subCounts.get(id) ?? 0)
+  const check = useMemo(() => validateDeck(draft.cards, sub), [draft.cards, sub])
   const curve = chapterCurve(draft.cards)
   const code = deckCode(draft)
-  const dirty = !draft.saved || draft.saved.name !== draft.name || !sameCards(draft.saved.cards, draft.cards)
+  const dirty = !draft.saved || draft.saved.name !== draft.name || !sameCards(draft.saved.cards, draft.cards) || !sameCards(draft.saved.subconscious ?? [], sub)
   const say = (m: string) => setMsg(m)
 
   const refresh = () => setDecks(allDecks())
@@ -45,35 +51,37 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
   }
 
   /** Starter decks are read-only: the first edit turns them into an unsaved copy. */
-  const edit = (f: (cards: string[]) => string[], note?: string) => {
+  const edit = (f: (cards: string[]) => string[], note?: string, where: Part = part) => {
+    const next = where === 'main' ? { cards: f(draft.cards), subconscious: sub } : { cards: draft.cards, subconscious: f(sub) }
     if (draft.starter) {
-      setDraft({ id: newDeckId(), name: `${draft.name} (copy)`, cards: f(draft.cards), saved: null })
+      setDraft({ id: newDeckId(), name: `${draft.name} (copy)`, ...next, saved: null })
       say(`Starter decks can't be changed, so you're now editing a copy. ${note ?? ''}`)
     } else {
-      setDraft({ ...draft, cards: f(draft.cards) })
+      setDraft({ ...draft, ...next })
       say(note ?? '')
     }
   }
-  const add = (c: Card) => {
+  const add = (c: Card, where: Part = part) => {
     if (!playable(c)) return setSel(c)
-    if ((counts.get(c.id) ?? 0) >= DECK_RULES.maxCopies) return say(`Max ${DECK_RULES.maxCopies} copies of ${c.name}.`)
-    edit((cards) => [...cards, c.id])
+    if (total(c.id) >= DECK_RULES.maxCopies) return say(`Max ${DECK_RULES.maxCopies} copies of ${c.name} (deck and Subconscious together).`)
+    if (where === 'sub' && sub.length >= DECK_RULES.subconsciousSize) return say(`The Subconscious holds ${DECK_RULES.subconsciousSize} cards.`)
+    edit((cards) => [...cards, c.id], undefined, where)
   }
-  const remove = (id: string) => edit((cards) => {
+  const remove = (id: string, where: Part = part) => edit((cards) => {
     const i = cards.lastIndexOf(id)
     return i < 0 ? cards : [...cards.slice(0, i), ...cards.slice(i + 1)]
-  })
+  }, undefined, where)
 
   const store = (d: Deck, done: string) => {
     if (!saveDeck(d)) return say("Couldn't save: this browser blocks storage. Copy the deck code to keep the deck.")
     refresh()
-    setDraft(open({ id: d.id, name: d.name.trim() || 'Untitled deck', cards: d.cards }))
+    setDraft(open({ id: d.id, name: d.name.trim() || 'Untitled deck', cards: d.cards, subconscious: d.subconscious }))
     say(check.ok ? done : `${done} It isn't playable yet: see the problems below.`)
   }
   const save = () => store(draft, 'Saved.')
-  const saveAsNew = () => store({ id: newDeckId(), name: draft.saved ? `${draft.name} (copy)` : draft.name, cards: draft.cards }, 'Saved as a new deck.')
+  const saveAsNew = () => store({ id: newDeckId(), name: draft.saved ? `${draft.name} (copy)` : draft.name, cards: draft.cards, subconscious: sub }, 'Saved as a new deck.')
   const duplicate = () => {
-    setDraft({ id: newDeckId(), name: `${draft.name} (copy)`, cards: [...draft.cards], saved: null })
+    setDraft({ id: newDeckId(), name: `${draft.name} (copy)`, cards: [...draft.cards], subconscious: [...sub], saved: null })
     say('Copy made. Save it to keep it.')
   }
   const del = () => {
@@ -101,7 +109,11 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
   const importCode = () => {
     const r = parseDeckCode(importText)
     if (r.cards.length === 0) return say(r.unknown.length ? `No known cards in that code (unknown: ${r.unknown.join(', ')}).` : 'Paste a deck code first.')
-    edit(() => r.cards, `Loaded ${r.cards.length} cards.${r.unknown.length ? ` Unknown, skipped: ${r.unknown.join(', ')}.` : ''}`)
+    const note = `Loaded ${r.cards.length} cards${r.subconscious ? ` and a Subconscious of ${r.subconscious.length}` : ''}.${r.unknown.length ? ` Unknown, skipped: ${r.unknown.join(', ')}.` : ''}`
+    const loaded = { cards: r.cards, subconscious: r.subconscious ?? sub }
+    if (draft.starter) setDraft({ id: newDeckId(), name: `${draft.name} (copy)`, ...loaded, saved: null })
+    else setDraft({ ...draft, ...loaded })
+    say(note)
     setImportText('')
   }
 
@@ -137,10 +149,15 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
         <section className="db-pool" aria-label="Card pool">
           <h2>Cards</h2>
           <CardFilterBar filter={filter} onChange={setFilter} count={pool.length} />
+          <div className="row gap wrap" role="group" aria-label="Add cards to">
+            <span className="small muted">Tap adds to:</span>
+            <button type="button" className={`btn sm ${part === 'main' ? 'primary' : ''}`} onClick={() => setPart('main')}>Deck {draft.cards.length}/{DECK_RULES.size}</button>
+            <button type="button" className={`btn sm ${part === 'sub' ? 'primary' : ''}`} onClick={() => setPart('sub')}>Subconscious {sub.length}/{DECK_RULES.subconsciousSize}</button>
+          </div>
           <p className="muted small">Tap a card to add it. The i button shows its details.</p>
           <div className="pool-grid">
             {pool.map((c) => {
-              const n = counts.get(c.id) ?? 0
+              const n = total(c.id)
               return (
                 <div key={c.id} className="pool-tile">
                   <CardView card={c} dim={!playable(c) || n >= DECK_RULES.maxCopies} selected={n > 0} onClick={() => add(c)} badge={n > 0 ? `×${n}` : undefined} />
@@ -197,8 +214,8 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
             {check.warnings.map((w) => <p key={w} className="warn small">! {w}</p>)}
             {check.ok && check.warnings.length === 0 && <p className="db-ok small">✓ Ready to play.</p>}
             <p className="muted small">
-              House rules (deck building is still open in the rulebook): exactly {DECK_RULES.size} cards, max {DECK_RULES.maxCopies} copies
-              of a card, Entities only.
+              Exactly {DECK_RULES.size} cards plus a Subconscious of {DECK_RULES.subconsciousSize} (it becomes your Memories when they run out),
+              max {DECK_RULES.maxCopies} copies of a card across both, Entities and Words only.
             </p>
           </div>
 
@@ -216,13 +233,30 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
                       {c?.title && <span className="muted small"> {c.title}</span>}
                     </button>
                     <span className="deck-row-n">×{n}</span>
-                    <button type="button" className="btn sm db-step" aria-label={`Remove ${c?.name ?? id}`} onClick={() => remove(id)}>−</button>
-                    <button type="button" className="btn sm db-step" aria-label={`Add ${c?.name ?? id}`} onClick={() => c && add(c)} disabled={!c || !playable(c) || n >= DECK_RULES.maxCopies}>+</button>
+                    <button type="button" className="btn sm db-step" aria-label={`Remove ${c?.name ?? id}`} onClick={() => remove(id, 'main')}>−</button>
+                    <button type="button" className="btn sm db-step" aria-label={`Add ${c?.name ?? id}`} onClick={() => c && add(c, 'main')} disabled={!c || !playable(c) || total(id) >= DECK_RULES.maxCopies}>+</button>
                   </div>
                 )
               })}
             </div>
           ))}
+
+          <div className="deck-group subconscious">
+            <h3>Subconscious <span className="muted small">· {sub.length}/{DECK_RULES.subconsciousSize}</span></h3>
+            {sub.length === 0 && <p className="muted small">Empty. Pick “Subconscious” above, then tap cards to add them.</p>}
+            {sortCardIds([...subCounts.keys()]).map((id) => {
+              const c = CARD_BY_ID[id]
+              const n = subCounts.get(id)!
+              return (
+                <div key={id} className={`deck-row ${c ? `dom-${c.domain.toLowerCase()}` : ''}`}>
+                  <button type="button" className="deck-row-name" onClick={() => c && setSel(c)} disabled={!c}>{c ? c.name : id}</button>
+                  <span className="deck-row-n">×{n}</span>
+                  <button type="button" className="btn sm db-step" aria-label={`Remove ${c?.name ?? id} from the Subconscious`} onClick={() => remove(id, 'sub')}>−</button>
+                  <button type="button" className="btn sm db-step" aria-label={`Add ${c?.name ?? id} to the Subconscious`} onClick={() => c && add(c, 'sub')} disabled={!c || total(id) >= DECK_RULES.maxCopies || sub.length >= DECK_RULES.subconsciousSize}>+</button>
+                </div>
+              )
+            })}
+          </div>
 
           <details className="db-share">
             <summary>Share or import a deck code</summary>
@@ -246,9 +280,9 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
         <DetailsSheet card={sel} onClose={() => setSel(null)}>
           {playable(sel) ? (
             <div className="row gap wrap">
-              <button type="button" className="btn" onClick={() => remove(sel.id)} disabled={!counts.get(sel.id)}>− Remove</button>
-              <span>×{counts.get(sel.id) ?? 0} in deck</span>
-              <button type="button" className="btn primary" onClick={() => add(sel)} disabled={(counts.get(sel.id) ?? 0) >= DECK_RULES.maxCopies}>+ Add</button>
+              <button type="button" className="btn" onClick={() => remove(sel.id)} disabled={!(part === 'main' ? counts : subCounts).get(sel.id)}>− Remove</button>
+              <span>×{(part === 'main' ? counts : subCounts).get(sel.id) ?? 0} in {part === 'main' ? 'deck' : 'Subconscious'}</span>
+              <button type="button" className="btn primary" onClick={() => add(sel)} disabled={total(sel.id) >= DECK_RULES.maxCopies}>+ Add</button>
             </div>
           ) : (
             <p className="warn small">{sel.type}s can't be put in a deck yet.</p>

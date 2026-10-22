@@ -6,7 +6,7 @@
 import { CARD_BY_ID, type Card } from './cards'
 import { whoMustAct, type BotPolicy } from './driver'
 import {
-  attackTargets, canActivate, canAttack, canChant, canContinue, canStart, flipsFor, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
+  attackTargets, canActivate, RULES, canSwapEssence, canAttack, canChant, canContinue, canStart, flipsFor, hasHeartMark, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
   type Action, type CardInst, type FightMode, type GameState, type PendingChoice, type PlayerIdx, type Story,
 } from './engine'
 
@@ -53,7 +53,9 @@ export function avgStars(s: GameState, p: PlayerIdx) {
 
 /** Exact distribution of flipping `flips` cards from the player's Memories (drawn without replacement, order unknown). */
 function flipDist(s: GameState, p: PlayerIdx, flips: number, bonus: number): Dist {
-  const mem = s.players[p].memories
+  const pl = s.players[p]
+  // rulebook §9: a thin Memories tops up its flips from the Subconscious (approximated as one pool)
+  const mem = RULES.runningOut && pl.memories.length < flips ? [...pl.memories, ...(pl.extra ?? [])] : pl.memories
   const n = [0, 0, 0]
   for (const c of mem) n[cardOf(c).stars]++
   const k = Math.min(flips, mem.length)
@@ -69,17 +71,18 @@ function flipDist(s: GameState, p: PlayerIdx, flips: number, bonus: number): Dis
 
 function sideDist(s: GameState, p: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): Dist {
   const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
-  return mode === 'sure' ? [[sureOf(s, c) + bonus, 1]] : flipDist(s, p, flipsFor(s, c), bonus)
+  return mode === 'sure' ? [[sureOf(s, c) + bonus, 1]] : flipDist(s, p, flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0), bonus)
 }
 
-/** Probabilities that the attacker wins / loses (a tie changes nothing). */
-function odds(a: Dist, d: Dist) {
+/** Probabilities that the attacker wins / loses. A tie changes nothing, except that a sure hit wins it against a flip (V2.8). */
+function odds(a: Dist, d: Dist, ma?: FightMode, md?: FightMode) {
   let win = 0
   let lose = 0
+  const tieTo = RULES.sureWinsTies && ma && md && ma !== md ? (ma === 'sure' ? 'win' : 'lose') : null
   for (const [x, px] of a)
     for (const [y, py] of d) {
-      if (x > y) win += px * py
-      else if (y > x) lose += px * py
+      if (x > y || (x === y && tieTo === 'win')) win += px * py
+      else if (y > x || (x === y && tieTo === 'lose')) lose += px * py
     }
   return { win, lose }
 }
@@ -89,18 +92,31 @@ function strength(s: GameState, p: PlayerIdx, c: CardInst) {
   return Math.max(sureOf(s, c), flipsFor(s, c) * avgStars(s, p)) + powerBonus(s, c.uid)
 }
 
+/** What revealing one of a player's Values is worth to the opponent. */
+const essenceWorth = (s: GameState, p: PlayerIdx) => (s.players[p].essence <= 0 ? 100 : 12 / (s.players[p].essence + 1) + 2)
+
+/** Chance that flipping `flips` cards from Memories shows at least one Heart mark. */
+function touchChance(s: GameState, p: PlayerIdx, flips: number) {
+  const mem = s.players[p].memories
+  const h = mem.filter(hasHeartMark).length
+  const k = Math.min(flips, mem.length)
+  return mem.length ? 1 - binom(mem.length - h, k) / binom(mem.length, k) : 0
+}
+
 /** How much a player values the top of this Story (what deleting it costs them). */
 function storyValue(s: GameState, p: PlayerIdx, st: Story) {
   const c = topOf(st)
   const traits = traitsOf(s, c.uid)
   if (traits.includes(UNDELETABLE)) return 0
-  // death-defiant (and Kurogane's own text): its owner loses 1 Essence instead, the game's real currency
-  if (traits.includes('death-defiant') || /instead lose \d+ Essence/i.test(cardOf(c).text)) return s.players[p].essence <= 1 ? 100 : 12 / s.players[p].essence + 2
+  // timeless (and Kurogane's own text): its owner loses 1 Essence instead, the game's real currency
+  if (traits.includes('timeless') || /instead lose \d+ (Essence|Value)/i.test(cardOf(c).text)) return s.players[p].essence <= (RULES.heart ? 0 : 1) ? 100 : 12 / (s.players[p].essence + (RULES.heart ? 1 : 0)) + 2
   let v = 1 + strength(s, p, c) + 0.5 * cardOf(c).chapter
   // "When deleted: delete all Entities on your field" (Prima)
   if (/When deleted: delete all/i.test(cardOf(c).text)) v += 2 * (s.players[p].stories.length - 1) + 2
   // losing your last Entity opens you to direct attacks
   if (st.cards.length === 1 && s.players[p].stories.length === 1) v += 3
+  // V2.2: a Story laid bare reaches the Essence
+  if (RULES.storyLaidBare && st.cards.length === 1 && st.lost?.length) v += essenceWorth(s, p)
   return v
 }
 
@@ -108,13 +124,15 @@ function storyValue(s: GameState, p: PlayerIdx, st: Story) {
 function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: PlayerIdx; st: Story }) {
   const vA = storyValue(s, atk.p, atk.st)
   const vD = storyValue(s, def.p, def.st)
+  // V2.3: winning a flip with a Heart-marked card also reveals a Value
+  const touch = RULES.memoriesTouch ? touchChance(s, atk.p, flipsFor(s, topOf(atk.st))) * essenceWorth(s, def.p) : 0
   let best = { mode: 'sure' as FightMode, ev: -Infinity }
   for (const ma of MODES) {
     const da = sideDist(s, atk.p, topOf(atk.st), ma, 'attacker')
     let worst = Infinity
     for (const md of MODES) {
-      const o = odds(da, sideDist(s, def.p, topOf(def.st), md, 'defender'))
-      worst = Math.min(worst, o.win * vD - o.lose * vA)
+      const o = odds(da, sideDist(s, def.p, topOf(def.st), md, 'defender'), ma, md)
+      worst = Math.min(worst, o.win * (vD + (ma === 'flip' && !(RULES.sureBlocksTouch && md === 'sure') ? touch : 0)) - o.lose * vA)
     }
     if (worst > best.ev) best = { mode: ma, ev: worst }
   }
@@ -123,7 +141,7 @@ function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: Play
 
 // ---------- choices ----------
 
-const HARMFUL_WORDS = /ill-fated|delet|doomed|pacifist|inoffensive|forget|discard|\blose|can.?t|−\d|-\d/i
+const HARMFUL_WORDS = /starless|delet|doomed|pacifist|inoffensive|forget|discard|\blose|can.?t|−\d|-\d/i
 /** Whether a choice hurts what it targets. The prompt starts with the card's name ("Familiar Raiden: ..."), skip it. */
 const harmfulChoice = (ch: PendingChoice) => HARMFUL_WORDS.test(ch.prompt.slice(ch.prompt.indexOf(':') + 1))
 
@@ -158,12 +176,21 @@ function smartPicks(s: GameState, ch: PendingChoice): string[] {
     const good = ranked.filter((uid) => score(uid) > 0)
     return ranked.slice(0, Math.max(min, Math.min(max, good.length)))
   }
-  const cards = [...s.players[p].memories, ...s.players[p].thoughts, ...s.players[p].discard]
-  // "put any on the bottom" (Read the Stars): keep stars on top for flips, send starless cards away
+  const cards = [...s.players[p].memories, ...s.players[p].thoughts, ...s.players[p].discard, ...s.players[p].essenceStack.map((e) => e.c)]
+  // "put any on the bottom" (Read the Stars): keep stars on top for flips, send 0-star cards away
   if (ch.effect === 'bottom') return ch.options.filter((uid) => { const c = cards.find((x) => x.uid === uid); return !!c && cardOf(c).stars === 0 })
   const val = (uid: string) => {
     const c = cards.find((x) => x.uid === uid)
     return c ? handValue(s, p, c) : 0
+  }
+  // Change of Values: always take the best revealed Value back, then bury the weakest card in hand
+  if (ch.effect === 'cov1') return [...ch.options].sort((a, b) => val(b) - val(a)).slice(0, max)
+  if (ch.effect === 'cov2') {
+    const worst = [...ch.options].sort((a, b) => val(a) - val(b)).slice(0, max)
+    // with the Chant trigger a pick is optional: swap only when the revealed Value is worth more in hand
+    if (ch.min > 0) return worst
+    const back = String(ch.data?.value ?? '').split(',')
+    return worst.filter((uid, i) => back[i] && val(back[i]) > val(uid) + 1)
   }
   const ranked = [...ch.options].sort((a, b) => (harmful ? val(a) - val(b) : val(b) - val(a)))
   return ranked.slice(0, harmful ? min : max)
@@ -237,7 +264,7 @@ function winChance(s: GameState, p: PlayerIdx, storyId: string, targetId: string
   const a = s.players[p].stories.find((st) => st.id === storyId)
   const d = s.players[foeOf(p)].stories.find((st) => st.id === targetId)
   if (!a || !d) return 0
-  return Math.max(...MODES.map((ma) => Math.min(...MODES.map((md) => odds(sideDist(s, p, topOf(a), ma, 'attacker'), sideDist(s, foeOf(p), topOf(d), md, 'defender')).win))))
+  return Math.max(...MODES.map((ma) => Math.min(...MODES.map((md) => odds(sideDist(s, p, topOf(a), ma, 'attacker'), sideDist(s, foeOf(p), topOf(d), md, 'defender'), ma, md).win))))
 }
 
 function easyPolicy(s: GameState, p: PlayerIdx): Action | null {
@@ -287,6 +314,20 @@ function goodChants(s: GameState, p: PlayerIdx): Action[] {
     out.push({ a, v: cardOf(c).echo ?? 1 })
   }
   return out.sort((x, y) => y.v - x.v).map((x) => x.a)
+}
+
+/** Swap a revealed Essence card into Thoughts when it is clearly better than our worst card in hand. */
+function goodSwap(s: GameState, p: PlayerIdx): Action[] {
+  const pl = s.players[p]
+  if (!pl.thoughts.length) return []
+  const worst = [...pl.thoughts].sort((a, b) => handValue(s, p, a) - handValue(s, p, b))[0]
+  let best: { uid: string; v: number } | null = null
+  for (const e of pl.essenceStack) {
+    if (canSwapEssence(s, p, e.c.uid, worst.uid)) continue
+    const v = handValue(s, p, e.c)
+    if (!best || v > best.v) best = { uid: e.c.uid, v }
+  }
+  return best && best.v > handValue(s, p, worst) + 1 ? [{ t: 'swapEssence', essenceUid: best.uid, handUid: worst.uid }] : []
 }
 
 function bestContinue(s: GameState, p: PlayerIdx): Action[] {
@@ -345,9 +386,12 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
         const vD = storyValue(s, p, dSt)
         const am = attackEV(s, { p: f.attacker.player, st: aSt }, { p, st: dSt }).mode
         const da = sideDist(s, f.attacker.player, topOf(aSt), am, 'attacker')
+        // V2.4: winning a flip with a Heart card can heal a revealed Value
+        const pl = s.players[p]
+        const heal = RULES.changeOfValues && pl.lost > 0 && pl.thoughts.length ? touchChance(s, p, flipsFor(s, topOf(dSt)) + RULES.defenseExtraFlips) * essenceWorth(s, p) * Math.min(RULES.changeMax, pl.lost, pl.thoughts.length) : 0
         const score = (md: FightMode) => {
-          const o = odds(da, sideDist(s, p, topOf(dSt), md, 'defender'))
-          return o.lose * vA - o.win * vD
+          const o = odds(da, sideDist(s, p, topOf(dSt), md, 'defender'), am, md)
+          return o.lose * vA - o.win * (vD + (md === 'flip' ? heal : 0))
         }
         yield { t: 'chooseMode', player: p, mode: score('flip') > score('sure') ? 'flip' : 'sure' }
       }
@@ -359,6 +403,7 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
   const actives = s.players[p].stories.map((st) => topOf(st).uid).filter((uid) => !canActivate(s, uid))
   const oneTurn = (uid: string) => /\[1 turn\]|until the end of (the|this) turn/i.test(cardOf(topOf(storyOf(s, uid)!.st)).text)
   if (s.phase === 'main') {
+    yield* goodSwap(s, p)
     yield* bestContinue(s, p)
     yield* bestStarts(s, p)
     for (const uid of actives) if (!oneTurn(uid) && activationHelps(s, p, uid)) yield { t: 'activate', uid }

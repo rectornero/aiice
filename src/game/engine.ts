@@ -13,8 +13,8 @@
 //   cards in choices[0].player's own pile (show them to that player). Pick between min and max of them.
 // - bonusDetails / traitDetails say where a value comes from; UNDELETABLE is the "can't be deleted" trait.
 
-import { CARD_BY_ID, cardName, type Card } from './cards'
-import { activate, afterFight, computeField, destroy, enter, forgotten, resolveChoice, storedTraits, type FieldEntity } from './effects'
+import { CARD_BY_ID, cardName, extraDeckFor, type Card } from './cards'
+import { activate, afterFight, offerChangeOfValues, computeField, destroy, enter, forgotten, resolveChoice, storedTraits, type FieldEntity } from './effects'
 
 export type PlayerIdx = 0 | 1
 export type FightMode = 'sure' | 'flip'
@@ -32,20 +32,53 @@ export const RULES = {
   braveCharming: true,
   /** V2: if the opponent imagines a defender, attacks must target a defender. */
   defenderGuards: true,
-  /** V2: ill-fated wears off at the end of its owner's turn (it lasts through one of their turns). */
-  illFatedFades: true,
-  /** V2 candidate: the second player draws 1 extra card in their opening hand. */
-  secondPlayerExtraCard: false,
+  /** V2: starless wears off at the end of its owner's turn (it lasts through one of their turns). */
+  starlessFades: true,
+  /** V2.6 (Nero, 2026-10-22): the second player draws 6 at setup (fixes the first-player edge). */
+  secondPlayerExtraCard: true,
   /** V2 (comeback): a player who imagines no Entity at the start of their turn draws 2 instead of 1. */
   emptyBoardDrawsTwo: true,
   /** V2 candidate: when an Entity loses a fight, its owner loses 1 Essence (whether or not it's deleted). */
   fightLossCostsEssence: false,
+  /** V2.1 (Nero, 2026-10-22): Essence is a stack of face-down cards from your Memories. Losing 1 Essence reveals one;
+   *  once per turn you may swap a revealed Essence card with a card in your Thoughts. */
+  essenceCards: true,
+  /** V2.1 (Nero, 2026-10-22): "5 Values and one Heart". Essence is now called Values; with no face-down Value left,
+   *  the next hit reaches the Heart and ends the game. Off: you lose when the last Value is lost. */
+  heart: true,
+  /** V2.2 (Nero, 2026-10-22, rulebook §6): a beaten (read) Entity with a Chapter under it goes face down under its Story
+   *  (a read Chapter). Reading the last face-up Entity of an opponent's Story with read Chapters lays it bare:
+   *  the Story empties and reaches its owner's Essence (reveal 1 Value). */
+  storyLaidBare: true,
+  /** V2.3 "Memories that touch" (Nero, 2026-10-22, rulebook §9): an attacker that wins a fight in which it flipped
+   *  at least one Heart-marked card also reaches the defender's Essence (reveal 1 Value), once per fight. */
+  memoriesTouch: true,
+  /** REMOVED by Nero (2026-10-22): revealed Values never go back face down. Kept as a switch for the simulator.
+   *  V2.4 "Change of Values" : a defender that wins a fight in which it flipped a Heart-marked card
+   *  may swap one of its revealed Values with a card from its Thoughts; the new card goes into the Essence face down. */
+  changeOfValues: false,
+  /** V2.4 buff candidates: defenders flip this many extra cards; Change hides up to N Values; a tie also counts. */
+  defenseExtraFlips: 0,
+  changeMax: 1,
+  changeOnTie: false,
+  /** candidate: an attacker that touches may also make a Change of Values */
+  changeForAttacker: false,
+  /** where Change of Values comes from: completing your Chant (Nero's pick, rulebook §7) or a defender's ♥ win (old v2.4) */
+  changeTrigger: 'chant' as 'defender' | 'chant',
+  /** V2.7 running out (Nero, rulebook §8b): the 10-card Subconscious (extra deck) becomes Memories when they run out; after that each
+   *  draw takes a face-down Value into Thoughts; with nothing left to draw you share your Heart and lose. */
+  runningOut: true,
+  /** V2.8 (Nero, 2026-10-22): a sure hit wins a tie against a flip (sure vs sure and flip vs flip ties still do nothing). */
+  sureWinsTies: true,
+  /** reference candidates (off): a defender's sure hit blocks the attacker's touch; +N to every sure hit. */
+  sureBlocksTouch: false,
+  sureBonus: 0,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
   noAttackOnStartTurn: true,
-  /** HOUSE RULE: death-defiant = "when it would be deleted, its owner loses 1 Essence instead" (Kurogane's text). */
-  deathDefiant: true,
+  /** HOUSE RULE: timeless = "when it would be deleted, its owner loses 1 Essence instead" (Kurogane's text). */
+  timeless: true,
 }
 
 /** Stored trait for "can't be deleted" (Hikari Mizuki). */
@@ -87,13 +120,27 @@ export interface Story {
   /** last turn this Story was started or continued (each Story moves once per turn) */
   movedTurn: number
   attackedTurn: number
+  /** V2.2: read Chapters, face down under the Story */
+  lost?: CardInst[]
 }
 
 export interface PlayerState {
   name: string
+  /** face-down Essence left (with essenceCards: hidden cards in essenceStack) */
   essence: number
+  /** lost Essence (with essenceCards: revealed cards in essenceStack) */
   lost: number
+  /** V2.1: the Essence stack, bottom → top; up = revealed */
+  essenceStack: { c: CardInst; up: boolean }[]
+  /** last turn this player swapped a revealed Essence card */
+  swappedTurn: number
   memories: CardInst[]
+  /** V2.7: the Subconscious (10-card extra deck), set aside until Memories run out */
+  extra: CardInst[]
+  /** V2.7: Values drawn from the Essence because nothing else was left */
+  essenceDraws?: number
+  /** turn the Subconscious became Memories */
+  subconsciousTurn?: number
   thoughts: CardInst[]
   stories: Story[]
   /** V2: the Chant: Words in the order they were added */
@@ -136,7 +183,7 @@ export interface PendingChoice {
   /** shown to the player, e.g. "Choose exactly 3 Entities: they get brave until end of turn" */
   prompt: string
   /** where the options are, so the UI knows how to show them */
-  zone: 'field' | 'memories' | 'thoughts'
+  zone: 'field' | 'memories' | 'thoughts' | 'essence'
   /** selectable card uids (for 'field': uids of imagined Entities) */
   options: string[]
   min: number
@@ -144,6 +191,19 @@ export interface PendingChoice {
   /** effects.ts internal: which continuation runs when the choice is made */
   effect: string
   data?: Record<string, string | number | boolean>
+}
+
+/** One hit on a player's Essence: a Value revealed, or the Heart reached. */
+export interface EssenceHit {
+  seq: number
+  player: PlayerIdx
+  /** what reached the Essence (an Entity's or card's name), if known */
+  source?: string
+  /** card ids of the Values revealed by this hit */
+  revealed: string[]
+  heart: boolean
+  /** how it got there: a laid-bare Story or Memories that touch (otherwise an attack or an effect) */
+  how?: 'bare' | 'touch'
 }
 
 export interface GameState {
@@ -159,6 +219,8 @@ export interface GameState {
   /** queue of decisions effects are waiting for; choices[0] is the current one */
   choices: PendingChoice[]
   lastFight: FightResult | null
+  /** V2.1: the latest hits on an Essence, for the app's cinematic calls; seq grows with every hit */
+  lastHit: EssenceHit | null
   winner: PlayerIdx | null
   log: string[]
 }
@@ -185,6 +247,7 @@ export type Action =
   | { t: 'gainEssence'; player: PlayerIdx }
   | { t: 'disperse'; player: PlayerIdx }
   | { t: 'concede'; player: PlayerIdx }
+  | { t: 'swapEssence'; essenceUid: string; handUid: string }
 
 // ---------- helpers ----------
 
@@ -256,7 +319,7 @@ export function roleBonus(s: GameState, uid: string, role: 'attacker' | 'defende
 
 /** The Entity's sure hit, before bonuses. */
 export function sureOf(_s: GameState, c: CardInst): number {
-  return card(c).sure
+  return card(c).sure + RULES.sureBonus
 }
 
 /** Why the Entity's activated ability can't be used now, or null if it can. */
@@ -285,8 +348,8 @@ function topCard(s: GameState, uid: string): CardInst | null {
 
 export function flipsFor(s: GameState, c: CardInst) {
   let n = card(c).fate
-  if (hasTrait(s, c.uid, 'fate-favored')) n += 1
-  if (hasTrait(s, c.uid, 'ill-fated')) n -= 1
+  if (hasTrait(s, c.uid, 'fated')) n += 1
+  if (hasTrait(s, c.uid, 'starless')) n -= 1
   return Math.max(0, n)
 }
 
@@ -340,38 +403,152 @@ export function log(s: GameState, msg: string) {
   s.log = [...s.log.slice(-199), msg]
 }
 
-function drawOne(s: GameState, p: PlayerIdx) {
+/** V2.7: when Memories are empty, the Subconscious becomes Memories. */
+export function refillMemories(s: GameState, p: PlayerIdx) {
   const pl = s.players[p]
+  if (pl.memories.length || !pl.extra?.length) return
+  pl.memories = pl.extra
+  pl.extra = []
+  pl.subconsciousTurn = s.turn
+  log(s, `${pl.name}'s Memories run out: their Subconscious becomes their Memories.`)
+}
+
+/** Flips n cards: from the top of Memories (they go to the bottom). Rulebook §9: if Memories hold fewer than n,
+ *  the rest come from the top of the Subconscious and go to its bottom. */
+export function flipCards(s: GameState, p: PlayerIdx, n: number): CardInst[] {
+  const pl = s.players[p]
+  if (RULES.runningOut) refillMemories(s, p)
+  const flipped = pl.memories.splice(0, n)
+  pl.memories.push(...flipped)
+  if (RULES.runningOut && flipped.length < n && pl.extra?.length) {
+    // like any flip, the cards go to the bottom of the pile they came from (Nero)
+    const more = pl.extra.splice(0, n - flipped.length)
+    pl.extra.push(...more)
+    flipped.push(...more)
+  }
+  return flipped
+}
+
+export function drawOne(s: GameState, p: PlayerIdx, setup = false) {
+  const pl = s.players[p]
+  if (RULES.runningOut) refillMemories(s, p)
   const c = pl.memories.shift()
-  if (!c) {
-    log(s, `${pl.name}'s Memories are empty, nothing to draw.`)
+  if (c) return void pl.thoughts.push(c)
+  if (!RULES.runningOut || setup) return log(s, `${pl.name}'s Memories are empty, nothing to draw.`)
+  // nothing left but the Essence: draw a face-down Value (self-damage); with none left, share your Heart
+  const i = pl.essenceStack.findIndex((e) => !e.up)
+  if (i >= 0 && RULES.essenceCards) {
+    const [v] = pl.essenceStack.splice(i, 1)
+    pl.thoughts.push(v.c)
+    pl.essenceDraws = (pl.essenceDraws ?? 0) + 1
+    countEssence(pl)
+    log(s, `${pl.name} has nothing left to draw: they take a face-down Value from their Essence into their Thoughts.`)
     return
   }
-  pl.thoughts.push(c)
+  if (s.winner !== null) return
+  s.winner = other(p)
+  log(s, `${pl.name} has nothing left to draw and shares their Heart: ${s.players[other(p)].name} wins!`)
 }
 
-export function loseEssence(s: GameState, p: PlayerIdx, n = 1) {
+/** Recounts essence / lost from the Essence stack (essenceCards only). */
+function countEssence(pl: PlayerState) {
+  if (!RULES.essenceCards) return
+  pl.essence = pl.essenceStack.filter((e) => !e.up).length
+  pl.lost = pl.essenceStack.filter((e) => e.up).length
+}
+
+/** Spends 1 lost Essence ("disperse"): with essenceCards the oldest revealed Essence card is forgotten. */
+export function disperseOne(s: GameState, p: PlayerIdx): boolean {
   const pl = s.players[p]
-  const lost = Math.min(n, pl.essence)
-  pl.essence -= lost
-  pl.lost += lost
-  if (pl.essence <= 0 && s.winner === null) {
-    s.winner = other(p)
-    log(s, `${pl.name} has no Essence left. ${s.players[other(p)].name} wins!`)
+  if (pl.lost <= 0) return false
+  const i = RULES.essenceCards ? pl.essenceStack.findIndex((e) => e.up) : -1
+  if (i >= 0) {
+    pl.discard.push(pl.essenceStack[i].c)
+    pl.essenceStack.splice(i, 1)
+    countEssence(pl)
+  } else pl.lost -= 1
+  return true
+}
+
+/** Why this revealed Essence card can't be swapped with this card in Thoughts now, or null if it can. */
+export function canSwapEssence(s: GameState, p: PlayerIdx, essenceUid: string, handUid?: string): string | null {
+  const pl = s.players[p]
+  if (!RULES.essenceCards) return 'Values are not cards in this mode.'
+  const e = pl.essenceStack.find((x) => x.c.uid === essenceUid)
+  if (!e || !e.up) return 'Only revealed Values can be swapped.'
+  if (s.active !== p || s.phase !== 'main') return 'Swap in your Main step.'
+  if (pl.swappedTurn === s.turn) return 'One swap per turn.'
+  if (handUid !== undefined && !pl.thoughts.some((c) => c.uid === handUid)) return 'Pick a card in your Thoughts.'
+  if (!pl.thoughts.length) return 'Your Thoughts are empty.'
+  return null
+}
+
+/** The player takes n hits: each reveals a face-down Value; a hit with none left reaches the Heart and ends the game. */
+export function loseEssence(s: GameState, p: PlayerIdx, n = 1, source?: string, how?: EssenceHit['how']) {
+  const pl = s.players[p]
+  const hit: EssenceHit = { seq: (s.lastHit?.seq ?? 0) + 1, player: p, revealed: [], heart: false }
+  if (source) hit.source = source
+  if (how) hit.how = how
+  s.lastHit = hit
+  for (let i = 0; i < n && s.winner === null; i++) {
+    if (pl.essence <= 0) {
+      if (RULES.heart) {
+        hit.heart = true
+        heartHit(s, p)
+      }
+      break
+    }
+    const hidden = pl.essenceStack.filter((x) => !x.up)
+    if (RULES.essenceCards && hidden.length === pl.essence) {
+      const e = hidden[hidden.length - 1]
+      e.up = true
+      hit.revealed.push(e.c.cardId)
+      log(s, `${pl.name} reveals a Value: ${cardName(card(e.c))}.`)
+      countEssence(pl)
+    } else {
+      // counts only (no Value cards, or the counts were adjusted by hand)
+      pl.essence -= 1
+      pl.lost += 1
+    }
+    if (!RULES.heart && pl.essence <= 0) heartHit(s, p)
   }
 }
 
-/** Raw delete of a Story's top Entity: no protection, replacement or trigger (see effects.ts destroy). */
-export function removeTop(s: GameState, p: PlayerIdx, storyId: string) {
+function heartHit(s: GameState, p: PlayerIdx) {
+  if (s.winner !== null) return
+  s.winner = other(p)
+  log(s, RULES.heart
+    ? `${s.players[p].name}'s Heart is reached: ${s.players[other(p)].name} wins!`
+    : `${s.players[p].name} has no Values left. ${s.players[other(p)].name} wins!`)
+}
+
+/** Raw delete of a Story's top Entity: no protection, replacement or trigger (see effects.ts destroy).
+ *  byFoe: the opponent deleted it (a fight or their effect), which can lay the Story bare. */
+export function removeTop(s: GameState, p: PlayerIdx, storyId: string, byFoe = false) {
   const pl = s.players[p]
   const story = pl.stories.find((st) => st.id === storyId)
   if (!story) return
   const gone = story.cards.pop()!
   delete s.mods[gone.uid]
-  pl.discard.push(gone)
-  // HOUSE RULE (rulebook [open]): the Story falls back one Chapter; the Entity below is imagined again.
-  if (story.cards.length === 0) pl.stories = pl.stories.filter((st) => st.id !== storyId)
-  log(s, `${cardName(card(gone))} is deleted.`)
+  // V2.2 (rulebook §6, Nero: "we don't delete"): a beaten Entity is read. The Story falls back a Chapter and the
+  // Entity stays under it face down as a read Chapter; with no Chapter under it, it is forgotten.
+  if (RULES.storyLaidBare && story.cards.length > 0) {
+    ;(story.lost ??= []).push(gone)
+    log(s, `${cardName(card(gone))} is read: it turns face down under its Story.`)
+  } else {
+    pl.discard.push(gone)
+    log(s, `${cardName(card(gone))} is read and forgotten.`)
+  }
+  if (story.cards.length > 0) return
+  pl.stories = pl.stories.filter((st) => st.id !== storyId)
+  const lost = story.lost ?? []
+  if (!lost.length) return
+  pl.discard.push(...lost)
+  story.lost = []
+  if (byFoe && s.winner === null) {
+    log(s, `${pl.name}'s Story is laid bare: it reaches ${pl.name}'s Essence!`)
+    loseEssence(s, p, 1, `${cardName(card(gone))}'s Story`, 'bare')
+  }
 }
 
 function clone(s: GameState): GameState {
@@ -380,7 +557,7 @@ function clone(s: GameState): GameState {
 
 // ---------- setup ----------
 
-export function newGame(opts: { seed: number; decks: [string[], string[]]; names: [string, string] }): GameState {
+export function newGame(opts: { seed: number; decks: [string[], string[]]; names: [string, string]; extras?: [string[], string[]] }): GameState {
   const s: GameState = {
     rng: opts.seed | 0,
     nextUid: 1,
@@ -391,7 +568,10 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
       name: opts.names[i],
       essence: RULES.startingEssence,
       lost: 0,
+      essenceStack: [],
+      swappedTurn: 0,
       memories: [],
+      extra: [],
       thoughts: [],
       stories: [],
       chants: [],
@@ -403,6 +583,7 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     pendingFight: null,
     choices: [],
     lastFight: null,
+    lastHit: null,
     winner: null,
     log: [],
   }
@@ -410,10 +591,18 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     const pl = s.players[p]
     pl.memories = opts.decks[p].map((cardId) => ({ uid: `c${s.nextUid++}`, cardId }))
     shuffle(s, pl.memories)
-    for (let i = 0; i < RULES.openingHand; i++) drawOne(s, p)
+    if (RULES.runningOut) {
+      pl.extra = (opts.extras?.[p] ?? extraDeckFor(opts.decks[p])).map((cardId) => ({ uid: `c${s.nextUid++}`, cardId }))
+      shuffle(s, pl.extra)
+    }
+    if (RULES.essenceCards) {
+      pl.essenceStack = pl.memories.splice(0, RULES.startingEssence).map((c) => ({ c, up: false }))
+      countEssence(pl)
+    }
+    for (let i = 0; i < RULES.openingHand; i++) drawOne(s, p, true)
   }
   s.active = rand(s) < 0.5 ? 0 : 1
-  if (RULES.secondPlayerExtraCard) drawOne(s, other(s.active))
+  if (RULES.secondPlayerExtraCard) drawOne(s, other(s.active), true)
   log(s, `${s.players[s.active].name} goes first (and skips the first draw).`)
   return s
 }
@@ -445,7 +634,7 @@ function settle(s: GameState) {
   }
   while (s.choices.length) {
     const ch = s.choices[0]
-    const zone = ch.zone === 'field' ? null : s.players[ch.player][ch.zone]
+    const zone = ch.zone === 'field' ? null : ch.zone === 'essence' ? s.players[ch.player].essenceStack.filter((e) => e.up).map((e) => e.c) : s.players[ch.player][ch.zone]
     const options = ch.options.filter((uid) => (zone ? zone.some((c) => c.uid === uid) : ownerOf(s, uid) !== null))
     if (options.length) {
       s.choices[0] = { ...ch, options, min: Math.min(ch.min, options.length), max: Math.min(ch.max, options.length) }
@@ -495,6 +684,7 @@ function step(s: GameState, a: Action): boolean {
         log(s, `${pl.name}'s Chant is complete: ${pl.chants.map((x) => card(x).name).join(', ')} are forgotten.`)
         pl.discard.push(...pl.chants)
         pl.chants = []
+        if (RULES.changeOfValues && RULES.changeTrigger === 'chant') offerChangeOfValues(s, me, c)
       }
       return true
     }
@@ -512,8 +702,8 @@ function step(s: GameState, a: Action): boolean {
         // HOUSE RULE (playtest-01): a direct attack is only possible when the opponent imagines no Entity.
         if (s.players[foe].stories.length > 0) return false
         story.attackedTurn = s.turn
-        log(s, `${cardName(card(atk))} attacks ${s.players[foe].name} directly: they lose 1 Essence.`)
-        loseEssence(s, foe)
+        log(s, `${card(atk).name} reaches ${s.players[foe].name}'s Essence! “I Dream your Value!”`)
+        loseEssence(s, foe, 1, card(atk).name)
         return true
       }
       const target = attackTargets(s, foe).find((st) => st.id === a.target)
@@ -548,12 +738,12 @@ function step(s: GameState, a: Action): boolean {
         m.turnBonus = 0
         m.traits = m.traits.filter((t) => !t.oneTurn && !(t.untilTurn !== undefined && t.untilTurn <= s.turn))
       }
-      if (RULES.illFatedFades) {
+      if (RULES.starlessFades) {
         for (const st of pl.stories) {
           const m = s.mods[top(st).uid]
-          if (m?.traits.some((t) => t.name === 'ill-fated')) {
-            m.traits = m.traits.filter((t) => t.name !== 'ill-fated')
-            log(s, `${card(top(st)).name} is no longer ill-fated.`)
+          if (m?.traits.some((t) => t.name === 'starless')) {
+            m.traits = m.traits.filter((t) => t.name !== 'starless')
+            log(s, `${card(top(st)).name} is no longer starless.`)
           }
         }
       }
@@ -627,22 +817,37 @@ function step(s: GameState, a: Action): boolean {
       removeTop(s, a.player, a.storyId)
       return true
     case 'loseEssence':
-      log(s, `${s.players[a.player].name} loses 1 Essence.`)
+      log(s, `${s.players[a.player].name} takes a hit.`)
       loseEssence(s, a.player)
       return true
     case 'gainEssence': {
       const p = s.players[a.player]
       if (p.lost <= 0) return false
-      p.lost -= 1
-      p.essence += 1
-      log(s, `${p.name} regains 1 Essence.`)
+      const up = RULES.essenceCards ? p.essenceStack.find((e) => e.up) : undefined
+      if (up) {
+        up.up = false
+        countEssence(p)
+      } else {
+        p.lost -= 1
+        p.essence += 1
+      }
+      log(s, `${p.name} turns 1 Value face down again.`)
       return true
     }
     case 'disperse': {
       const p = s.players[a.player]
-      if (p.lost <= 0) return false
-      p.lost -= 1
-      log(s, `${p.name} disperses 1 lost Essence.`)
+      if (!disperseOne(s, a.player)) return false
+      log(s, `${p.name} disperses 1 revealed Value.`)
+      return true
+    }
+    case 'swapEssence': {
+      if (canSwapEssence(s, me, a.essenceUid, a.handUid)) return false
+      const e = pl.essenceStack.find((x) => x.c.uid === a.essenceUid)!
+      const h = pl.thoughts.find((c) => c.uid === a.handUid)!
+      pl.thoughts = [...pl.thoughts.filter((c) => c !== h), e.c]
+      log(s, `${pl.name} swaps ${cardName(card(h))} from their Thoughts with the revealed Value ${cardName(card(e.c))}.`)
+      e.c = h
+      pl.swappedTurn = s.turn
       return true
     }
     case 'concede':
@@ -657,16 +862,18 @@ function findOnField(s: GameState, uid: string): CardInst | null {
   return null
 }
 
+/** V2.3: cards with a Heart mark next to their Fate stars. Card data sets `heart: true`; the simulator can add ids here. */
+export const HEART_MARKS = new Set<string>()
+export const hasHeartMark = (c: CardInst) => !!card(c).heart || HEART_MARKS.has(c.cardId)
+
 function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): FightSide {
   const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
   if (mode === 'sure') {
     const base = sureOf(s, c)
     return { player, card: c, mode, base, bonus, flips: 0, flipped: [], total: base + bonus }
   }
-  const pl = s.players[player]
-  const flips = flipsFor(s, c)
-  const flipped = pl.memories.splice(0, flips)
-  pl.memories.push(...flipped) // flipped cards go to the bottom of Memories
+  const flips = flipsFor(s, c) + (role === 'defender' ? RULES.defenseExtraFlips : 0)
+  const flipped = flipCards(s, player, flips)
   const base = flipped.reduce((n, x) => n + card(x).stars, 0)
   return { player, card: c, mode, base, bonus, flips, flipped, total: base + bonus }
 }
@@ -678,7 +885,9 @@ function resolveFight(s: GameState) {
   const attacker = fightSide(s, f.attacker.player, top(atkStory), f.modes[f.attacker.player]!, 'attacker')
   const defender = fightSide(s, f.defender.player, top(defStory), f.modes[f.defender.player]!, 'defender')
   // HOUSE RULE (rulebook [open]): on a tie nothing happens.
-  const outcome = attacker.total > defender.total ? 'attacker' : defender.total > attacker.total ? 'defender' : 'tie'
+  const sureTie = RULES.sureWinsTies && attacker.total === defender.total && attacker.mode !== defender.mode
+  const outcome = attacker.total > defender.total ? 'attacker' : defender.total > attacker.total ? 'defender'
+    : sureTie ? (attacker.mode === 'sure' ? 'attacker' : 'defender') : 'tie'
   s.pendingFight = null
   s.lastFight = { attacker, defender, outcome }
   const desc = (x: FightSide) => `${cardName(card(x.card))} ${x.mode === 'sure' ? 'takes its sure hit' : `flips ${x.flips}`} → ${x.total}`
@@ -686,10 +895,16 @@ function resolveFight(s: GameState) {
   const loser = outcome === 'attacker' ? defender : outcome === 'defender' ? attacker : null
   const deleted = loser ? destroy(s, loser.card.uid) : false
   if (!loser) log(s, 'Tie: both Entities survive.')
-  if (loser && RULES.fightLossCostsEssence && s.winner === null) {
-    log(s, `${s.players[loser.player].name} lost the fight: they lose 1 Essence.`)
-    loseEssence(s, loser.player)
+  if (RULES.memoriesTouch && outcome === 'attacker' && s.winner === null && attacker.flipped.some(hasHeartMark) && !(RULES.sureBlocksTouch && defender.mode === 'sure')) {
+    log(s, `${cardName(card(attacker.card))}'s Memories touch ${s.players[defender.player].name}: “I Dream your Value!”`)
+    loseEssence(s, defender.player, 1, cardName(card(attacker.card)), 'touch')
+    if (RULES.changeOfValues && RULES.changeForAttacker && s.winner === null) offerChangeOfValues(s, attacker.player, attacker.card)
   }
+  if (loser && RULES.fightLossCostsEssence && s.winner === null) {
+    log(s, `${s.players[loser.player].name} lost the fight: they take a hit.`)
+    loseEssence(s, loser.player, 1, card(loser === attacker ? defender.card : attacker.card).name)
+  }
+  if (RULES.changeOfValues && RULES.changeTrigger === 'defender' && (outcome === 'defender' || (RULES.changeOnTie && outcome === 'tie')) && s.winner === null && defender.flipped.some(hasHeartMark)) offerChangeOfValues(s, defender.player, defender.card)
   afterFight(s, [
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
     { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },

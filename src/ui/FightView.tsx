@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { cardName } from '../game/cards'
 import {
-  card, findStory, flipsFor, powerBonus, roleBonus, sureOf, top,
+  card, findStory, flipsFor, hasHeartMark, RULES, powerBonus, roleBonus, sureOf, top,
   type Action, type FightResult, type FightSide, type GameState, type PlayerIdx,
 } from '../game/engine'
 import { CardView, Stars } from './CardView'
+import { loadAutoAdvance } from './settings'
 
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`)
 
@@ -47,16 +48,25 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
   const flips = r.attacker.flipped.length + r.defender.flipped.length
   const last = flips + 1 // after every flip: the totals
   const [shown, setShown] = useState(() => (reducedMotion() ? last : 0))
+  const [auto] = useState(loadAutoAdvance)
   useEffect(() => {
-    if (shown >= last) return
+    if (shown >= last) {
+      // the result waits for Continue unless auto-advance is on
+      if (!auto) return
+      const id = setTimeout(onClose, 2500)
+      return () => clearTimeout(id)
+    }
     const id = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 300 : STEP_MS)
     return () => clearTimeout(id)
-  }, [shown, last])
+  }, [shown, last, auto, onClose])
   const done = shown >= last
   const winner = r.outcome === 'tie' ? null : r.outcome === 'attacker' ? r.attacker : r.defender
+  // Memories that touch: the attacker won with a Heart-marked card among its flips
+  const touch = RULES.memoriesTouch && r.outcome === 'attacker' && r.attacker.flipped.some(hasHeartMark)
+  const heartShown = r.attacker.flipped.some((c, i) => i < shown && hasHeartMark(c))
   return (
-    <div className="overlay" onClick={() => (done ? onClose() : setShown(last))}>
-      <div className="dialog center reveal">
+    <div className="overlay" onClick={() => !done && setShown(last)}>
+      <div className={`dialog center reveal ${heartShown ? 'has-heart' : ''}`}>
         <div className="vs">
           <RevealSide s={s} x={r.attacker} role="attacks" upTo={shown} offset={0} done={done} won={winner === r.attacker} />
           <span>vs</span>
@@ -65,7 +75,13 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
         {done ? (
           <>
             <h2>{winner ? `${card(winner.card).name} wins the fight` : 'Tie: nothing happens'}</h2>
-            <button className="btn primary">OK</button>
+            {touch && (
+              <div className="touch-banner" role="status">
+                <span className="touch-heart">♥</span>
+                <span>{card(r.attacker.card).name}'s Memories touch {s.players[r.defender.player].name}!</span>
+              </div>
+            )}
+            <button type="button" className="btn primary" autoFocus onClick={(e) => { e.stopPropagation(); onClose() }}>Continue</button>
           </>
         ) : <div className="muted small">Tap to skip</div>}
       </div>
@@ -84,8 +100,9 @@ function RevealSide({ s, x, role, upTo, offset, done, won }: {
       {x.mode === 'flip' && (
         <div className="flipped">
           {x.flipped.map((c, i) => (offset + i < upTo ? (
-            <div key={c.uid} className="flipcard" title={cardName(card(c))}>
+            <div key={c.uid} className={`flipcard ${hasHeartMark(c) ? 'heart' : ''}`} title={cardName(card(c)) + (hasHeartMark(c) ? ' · Heart mark' : '')}>
               <CardView card={card(c)} size="xs" />
+              {hasHeartMark(c) && <span className="flip-heart" aria-label="Heart mark">♥</span>}
               <Stars n={card(c).stars} />
             </div>
           ) : <div key={c.uid} className="flipcard pending"><div className="card xs back" /></div>))}

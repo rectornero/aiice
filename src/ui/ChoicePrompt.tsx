@@ -37,7 +37,7 @@ export function ChoiceModal({ s, ch, picks, toggle, onConfirm, onHide }: {
   s: GameState; ch: PendingChoice; picks: string[]; toggle: (uid: string) => void; onConfirm: () => void; onHide: () => void
 }) {
   const pl = s.players[ch.player]
-  const pool = ch.zone === 'memories' ? pl.memories : pl.thoughts
+  const pool = ch.zone === 'memories' ? pl.memories : ch.zone === 'essence' ? pl.essenceStack.map((e) => e.c) : pl.thoughts
   const opts = ch.options.map((uid) => pool.find((c) => c.uid === uid)).filter((c) => !!c)
   return (
     <div className="overlay">
@@ -46,7 +46,7 @@ export function ChoiceModal({ s, ch, picks, toggle, onConfirm, onHide }: {
           <h2>{ch.prompt}</h2>
           <button className="btn ghost sm" onClick={onHide}>See board</button>
         </div>
-        <div className="muted">{countText(ch)} from your {ch.zone === 'memories' ? 'Memories' : 'Thoughts'} · {picks.length} chosen</div>
+        <div className="muted">{countText(ch)} from your {ch.zone === 'memories' ? 'Memories' : ch.zone === 'essence' ? 'revealed Values' : 'Thoughts'} · {picks.length} chosen</div>
         <div className="grid">
           {opts.map((c) => (
             <CardView key={c.uid} card={card(c)} size="sm" selected={picks.includes(c.uid)} onClick={() => toggle(c.uid)}

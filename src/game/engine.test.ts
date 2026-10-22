@@ -26,8 +26,10 @@ describe('engine', () => {
   it('deals opening hands', () => {
     const s = start()
     expect(s.players[0].thoughts).toHaveLength(5)
-    expect(s.players[1].memories).toHaveLength(10) // 20 − 5 Essence − 5 in Thoughts
-    expect(s.players[1].essenceStack.filter((e) => !e.up)).toHaveLength(5)
+    const second = s.active === 0 ? 1 : 0
+    expect(s.players[s.active].memories).toHaveLength(10) // 20 − 5 Essence − 5 in Thoughts
+    expect(s.players[second].memories).toHaveLength(9) // the second player draws 6
+    expect(s.players[second].essenceStack.filter((e) => !e.up)).toHaveLength(5)
   })
 
   it('is deterministic from the seed', () => {

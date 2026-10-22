@@ -128,7 +128,7 @@ describe('Values and Heart (v2.1)', () => {
     const s = newGame({ seed: 5, decks: [Array(20).fill('SOFA-001'), Array(20).fill('SOFA-024')], names: ['A', 'B'] })
     for (const pl of s.players) {
       expect(pl.essenceStack.map((e) => e.up)).toEqual([false, false, false, false, false])
-      expect(pl.memories).toHaveLength(10)
+      expect(pl.memories).toHaveLength(pl === s.players[s.active] ? 10 : 9)
     }
   })
 
@@ -207,6 +207,7 @@ describe('V2.3: Memories that touch', () => {
 describe('V2.4: Change of Values', () => {
   it('(old trigger) a defender that flips a Heart card and wins may put a hand card face down in place of a revealed Value', () => {
     RULES.changeTrigger = 'defender'
+    RULES.changeOfValues = true
     let s = table({ field: [['SOFA-002'], ['SOFA-001']], hand: [[], ['SOFA-004']], memories: [[], ['SOFA-028', 'SOFA-028', 'SOFA-028']] })
     s.players[1].essenceStack[0].up = true
     s.players[1].essence = 4
@@ -222,9 +223,11 @@ describe('V2.4: Change of Values', () => {
     expect(s.players[1].thoughts.some((c) => c.uid === back)).toBe(true)
     expect(s.players[1].essence).toBe(5)
     RULES.changeTrigger = 'chant'
+    RULES.changeOfValues = false
   })
 
-  it('completing the Chant lets you hide a revealed Value: swap it with a hand card, or turn it back face down', () => {
+  it('(removed) completing the Chant lets you hide a revealed Value: swap it with a hand card, or turn it back face down', () => {
+    RULES.changeOfValues = true
     let s = table({ hand: [['SI-C03', 'SOFA-004'], []], chants: [['SI-C01', 'SI-C01'], []], memories: [['SOFA-001', 'SOFA-002', 'SOFA-003'], []] })
     s.players[0].essenceStack[0].up = true
     s.players[0].essence = 4
@@ -241,5 +244,6 @@ describe('V2.4: Change of Values', () => {
     expect(a.players[0].essenceStack[0].c.cardId).toBe('SOFA-004')
     expect(a.players[0].essenceStack[0].up).toBe(false)
     expect(a.players[0].thoughts.some((c) => c.uid === v.uid)).toBe(true)
+    RULES.changeOfValues = false
   })
 })

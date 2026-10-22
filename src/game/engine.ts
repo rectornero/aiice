@@ -34,8 +34,8 @@ export const RULES = {
   defenderGuards: true,
   /** V2: ill-fated wears off at the end of its owner's turn (it lasts through one of their turns). */
   illFatedFades: true,
-  /** V2 candidate: the second player draws 1 extra card in their opening hand. */
-  secondPlayerExtraCard: false,
+  /** V2.6 (Nero, 2026-10-22): the second player draws 6 at setup (fixes the first-player edge). */
+  secondPlayerExtraCard: true,
   /** V2 (comeback): a player who imagines no Entity at the start of their turn draws 2 instead of 1. */
   emptyBoardDrawsTwo: true,
   /** V2 candidate: when an Entity loses a fight, its owner loses 1 Essence (whether or not it's deleted). */
@@ -53,9 +53,10 @@ export const RULES = {
   /** V2.3 "Memories that touch" (Nero, 2026-10-22, rulebook §9): an attacker that wins a fight in which it flipped
    *  at least one Heart-marked card also reaches the defender's Essence (reveal 1 Value), once per fight. */
   memoriesTouch: true,
-  /** V2.4 "Change of Values" (Nero, 2026-10-22): a defender that wins a fight in which it flipped a Heart-marked card
+  /** REMOVED by Nero (2026-10-22): revealed Values never go back face down. Kept as a switch for the simulator.
+   *  V2.4 "Change of Values" : a defender that wins a fight in which it flipped a Heart-marked card
    *  may swap one of its revealed Values with a card from its Thoughts; the new card goes into the Essence face down. */
-  changeOfValues: true,
+  changeOfValues: false,
   /** V2.4 buff candidates: defenders flip this many extra cards; Change hides up to N Values; a tie also counts. */
   defenseExtraFlips: 0,
   changeMax: 1,

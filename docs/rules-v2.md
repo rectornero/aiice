@@ -133,3 +133,8 @@ When your Chant completes, you may hide one revealed Value. Either swap it with 
 |---|---|---|---|---|---|---|---|
 | v2.5 | 44.8% | 51.8% | 55.7% | 16.3 | 3.98 | 0.55 | 1.17 |
 | v2.5 +6 | 44.8% | 52.3% | 49.3% | 15.8 | 3.91 | 0.59 | 1.23 |
+
+## v2.6 (Nero, 2026-10-22): Change of Values removed, second player draws 6
+
+Revealed Values never go back face down (every Change of Values trigger is off; the switches stay for the simulator). The second player draws 6 at setup.
+Sim, 1000 games: Music 44.4%, Fate 52.8%, draws 2.8%, first player 49.0%, 15.7 turns, the winner keeps 3.61 Values face down, 1.94 touches and 1.20 laid-bare Stories per game.

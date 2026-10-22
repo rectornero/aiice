@@ -24,7 +24,7 @@ describe('bot', () => {
   })
 
   it('attacks the player directly when the opponent imagines nothing', () => {
-    let s = newGame({ seed: 5, decks: [music, fate], names: ['A', 'B'] })
+    let s = newGame({ seed: 6, decks: [music, fate], names: ['A', 'B'] })
     // play normal bot turns until it has an Entity able to attack and the opponent has none
     const bot = botPolicyFor('normal')
     let guard = 0

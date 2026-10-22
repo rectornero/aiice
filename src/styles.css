@@ -380,17 +380,22 @@ button.essence:hover, button.essence:focus-visible { background: rgba(79, 179, 2
 .chip.relic { background: #4a3a10; border-color: var(--gold); color: #ffe9a8; }
 .whispers { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 
-/* Fight clarity: named bonuses and the fight story */
-.bonus-parts { font-size: 12px; color: var(--muted, #9aa4c4); margin-top: 2px; }
+/* Fight clarity: named bonuses and the fight recap */
 .fight-bonuses { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; text-align: left; }
 .fight-events { margin: 4px 0 8px; padding-left: 18px; text-align: left; font-size: 13px; color: #b9f3c8; }
-.fight-story { text-align: left; max-height: 34vh; overflow-y: auto; margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, .25); font-size: 14px; line-height: 1.45; }
-.fight-story p { margin: 0 0 6px; }
-.fight-story .story-open { font-style: italic; }
-.fight-story .story-event { color: #b9f3c8; }
-.fight-story .story-outcome { font-weight: 600; }
-.fight-story .story-damage { color: #ffb4b4; padding-left: 10px; border-left: 2px solid #ff6b81; }
-.fight-story .story-head { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #ff8fa3; }
+.recap { text-align: left; font-size: 13px; }
+.recap table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.recap th, .recap td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.recap tbody th { width: 64px; color: var(--muted, #9aa4c4); font-weight: 500; }
+.recap thead th { font-size: 14px; }
+.recap thead th:first-child { width: 64px; }
+.recap thead th.won { color: #7dffa8; }
+.recap .recap-total td { font-size: 18px; font-weight: 700; }
+.recap-result { margin: 8px 0 4px; font-weight: 600; }
+.recap-head { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #ff8fa3; }
+.recap-damage { list-style: none; margin: 0; padding: 0; }
+.recap-damage li { padding: 3px 0; }
+.recap-icon { display: inline-block; width: 22px; text-align: center; }
 .eclipse-mark { margin-left: 3px; color: #c9b8ff; }
 .flip-eclipse { position: absolute; top: 2px; left: 4px; color: #c9b8ff; font-size: 18px; text-shadow: 0 0 6px #6d4bff; }
 .surge-mark { margin-left: 3px; color: #ffe066; }

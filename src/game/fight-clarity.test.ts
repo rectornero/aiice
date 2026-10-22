@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { fightStory } from '../ui/narrate'
+import { fightRecap } from '../ui/recap'
 import { bonusParts, ECLIPSE_MARKS, SHIELD_MARKS, SURGE_MARKS, newGame, reduce, RULES, top, type CardInst, type FightMode, type GameState, type PlayerIdx } from './engine'
 
 // Named bonuses, the +3 cap, the ☾ Eclipse mark and the fight story (Nero, 2026-10-22).
@@ -68,16 +68,14 @@ describe('fight clarity', () => {
     expect(a.parts?.at(-1)?.label).toMatch(/^eclipsed by ☾/)
   })
 
-  it('tells the fight as a story with a damage report', () => {
+  it('recaps both sides with named bonuses, the result and a damage report', () => {
     let s = table({ field: [['SOFA-030'], ['SOFA-024']] })
     s = bonus(s, uidOf(s, 0), 2)
     s = modes(attack(s), ['sure', 'sure'])
-    const lines = fightStory(s, s.lastFight!)
-    expect(lines[0].kind).toBe('open')
-    expect(lines.filter((l) => l.kind === 'move')).toHaveLength(2)
-    expect(lines.find((l) => l.kind === 'move')!.text).toContain('+2 from Adjusted by hand')
-    expect(lines.some((l) => l.kind === 'outcome')).toBe(true)
-    expect(lines.some((l) => l.kind === 'damage')).toBe(true)
+    const r = fightRecap(s, s.lastFight!)
+    expect(r.sides[0]).toMatchObject({ role: 'Attacker', roll: 'Sure hit', parts: [{ n: 2, label: 'Adjusted by hand' }] })
+    expect(r.result).toMatch(/wins by|Tie/)
+    expect(r.damage.length).toBeGreaterThan(0)
   })
 })
 

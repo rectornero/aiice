@@ -5,7 +5,7 @@ import {
   type Action, type BonusPart, type FightResult, type FightSide, type GameState, type PlayerIdx,
 } from '../game/engine'
 import { CardView, Stars } from './CardView'
-import { fightStory } from './narrate'
+import { fightRecap } from './recap'
 import { loadAutoAdvance } from './settings'
 
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`)
@@ -98,7 +98,7 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
     if (shown >= last) {
       // the result waits for Continue unless auto-advance is on
       if (!auto) return
-      const id = setTimeout(onClose, 6000) // time to read the fight story
+      const id = setTimeout(onClose, 6000) // time to read the recap
       return () => clearTimeout(id)
     }
     const id = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 300 : STEP_MS)
@@ -126,7 +126,7 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
                 <span>{card(r.attacker.card).name}'s Memories touch {s.players[r.defender.player].name}!</span>
               </div>
             )}
-            <FightStory s={s} r={r} />
+            <FightRecap s={s} r={r} />
             <button type="button" className="btn primary" autoFocus onClick={(e) => { e.stopPropagation(); onClose() }}>Continue</button>
           </>
         ) : <div className="muted small">Tap to skip</div>}
@@ -135,17 +135,34 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
   )
 }
 
-function FightStory({ s, r }: { s: GameState; r: FightResult }) {
-  const lines = fightStory(s, r)
-  const firstDamage = lines.findIndex((l) => l.kind === 'damage')
+/** Both sides' numbers with every bonus named, the result, and what the fight caused. */
+function FightRecap({ s, r }: { s: GameState; r: FightResult }) {
+  const { sides, result, damage } = fightRecap(s, r)
   return (
-    <div className="fight-story">
-      {lines.map((l, i) => (
-        <div key={i}>
-          {i === firstDamage && <div className="story-head">Damage report</div>}
-          <p className={`story-${l.kind}`}>{l.text}</p>
-        </div>
-      ))}
+    <div className="recap">
+      <table>
+        <thead>
+          <tr><th />{sides.map((x) => <th key={x.role} className={x.won ? 'won' : ''}>{x.name}<div className="muted small">{x.role} · {x.player}</div></th>)}</tr>
+        </thead>
+        <tbody>
+          <tr><th>Roll</th>{sides.map((x) => <td key={x.role}>{x.roll}</td>)}</tr>
+          <tr><th>Base</th>{sides.map((x) => <td key={x.role}>{x.base}</td>)}</tr>
+          <tr>
+            <th>Bonus</th>
+            {sides.map((x) => (
+              <td key={x.role}>{x.parts.length ? x.parts.map((p, i) => <div key={i}>{signed(p.n)} {p.label}</div>) : <span className="muted">none</span>}</td>
+            ))}
+          </tr>
+          <tr className="recap-total"><th>Total</th>{sides.map((x) => <td key={x.role}>{x.total}{x.won ? ' ✓' : ''}</td>)}</tr>
+        </tbody>
+      </table>
+      <div className="recap-result">{result}</div>
+      {damage.length > 0 && (
+        <>
+          <div className="recap-head">Damage report</div>
+          <ul className="recap-damage">{damage.map((d, i) => <li key={i}><span className="recap-icon">{d.icon}</span>{d.text}</li>)}</ul>
+        </>
+      )}
     </div>
   )
 }
@@ -176,12 +193,6 @@ function RevealSide({ s, x, role, upTo, offset, done, won }: {
       <div className={`total ${done ? 'in' : 'hidden'}`}>
         {x.bonus ? `${x.base} ${x.bonus > 0 ? '+' : '−'} ${Math.abs(x.bonus)} = ` : ''}<b>{x.total}</b>
       </div>
-      {done && x.bonus !== 0 && (
-        <div className="bonus-parts">
-          {x.mode === 'sure' ? `${x.base} sure hit` : `${x.base} ★`}
-          {(x.parts?.length ? x.parts : [{ n: x.bonus, label: 'bonus' }]).map((p, i) => <span key={i}> · {signed(p.n)} {p.label}</span>)}
-        </div>
-      )}
     </div>
   )
 }

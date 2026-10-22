@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { cardName } from '../game/cards'
 import {
-  card, findStory, flipsFor, powerBonus, roleBonus, sureOf, top,
+  card, findStory, flipsFor, hasHeartMark, RULES, powerBonus, roleBonus, sureOf, top,
   type Action, type FightResult, type FightSide, type GameState, type PlayerIdx,
 } from '../game/engine'
 import { CardView, Stars } from './CardView'
@@ -54,9 +54,12 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
   }, [shown, last])
   const done = shown >= last
   const winner = r.outcome === 'tie' ? null : r.outcome === 'attacker' ? r.attacker : r.defender
+  // Memories that touch: the attacker won with a Heart-marked card among its flips
+  const touch = RULES.memoriesTouch && r.outcome === 'attacker' && r.attacker.flipped.some(hasHeartMark)
+  const heartShown = r.attacker.flipped.some((c, i) => i < shown && hasHeartMark(c))
   return (
     <div className="overlay" onClick={() => (done ? onClose() : setShown(last))}>
-      <div className="dialog center reveal">
+      <div className={`dialog center reveal ${heartShown ? 'has-heart' : ''}`}>
         <div className="vs">
           <RevealSide s={s} x={r.attacker} role="attacks" upTo={shown} offset={0} done={done} won={winner === r.attacker} />
           <span>vs</span>
@@ -65,6 +68,12 @@ export function FightReveal({ s, r, onClose }: { s: GameState; r: FightResult; o
         {done ? (
           <>
             <h2>{winner ? `${card(winner.card).name} wins the fight` : 'Tie: nothing happens'}</h2>
+            {touch && (
+              <div className="touch-banner" role="status">
+                <span className="touch-heart">♥</span>
+                <span>{card(r.attacker.card).name}'s Memories touch {s.players[r.defender.player].name}!</span>
+              </div>
+            )}
             <button className="btn primary">OK</button>
           </>
         ) : <div className="muted small">Tap to skip</div>}
@@ -84,8 +93,9 @@ function RevealSide({ s, x, role, upTo, offset, done, won }: {
       {x.mode === 'flip' && (
         <div className="flipped">
           {x.flipped.map((c, i) => (offset + i < upTo ? (
-            <div key={c.uid} className="flipcard" title={cardName(card(c))}>
+            <div key={c.uid} className={`flipcard ${hasHeartMark(c) ? 'heart' : ''}`} title={cardName(card(c)) + (hasHeartMark(c) ? ' · Heart mark' : '')}>
               <CardView card={card(c)} size="xs" />
+              {hasHeartMark(c) && <span className="flip-heart" aria-label="Heart mark">♥</span>}
               <Stars n={card(c).stars} />
             </div>
           ) : <div key={c.uid} className="flipcard pending"><div className="card xs back" /></div>))}

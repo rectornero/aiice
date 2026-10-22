@@ -1,5 +1,6 @@
 // AI-ICE rules engine: a pure reducer, (state, action) → state.
-// Follows rulebook draft v0.2. Choices the rulebook leaves open are marked HOUSE RULE so they're easy to change.
+// SELF-ITERATION fork: follows rules-v2.md (self-iteration/rules-v2.md), which builds on rulebook draft v0.2.
+// v2 changes are marked V2 and switchable in RULES, so the balance sim can compare them. Choices the rulebook leaves open are marked HOUSE RULE so they're easy to change.
 // Card abilities live in effects.ts. The manual tools (bonuses, traits, Remember) stay available as overrides.
 //
 // CONTRACT shared by the UI, the bot and online play:
@@ -21,7 +22,24 @@ export type FightMode = 'sure' | 'flip'
 export const RULES = {
   startingEssence: 5,
   openingHand: 5,
-  maxStories: 5,
+  /** V2: 3 Stories (was 5): fits 3 slots per row on a phone and slows down wide-board snowballs. */
+  maxStories: 3,
+  /** V2: your Chant (a row of green Word cards) holds up to this many Words; the 3rd one completes it. */
+  maxChants: 3,
+  /** V2: when the Chant is full, it is complete and all its Words are forgotten. */
+  phraseClears: true,
+  /** V2: brave = +1 when attacking. charming = +1 when defending. */
+  braveCharming: true,
+  /** V2: if the opponent imagines a defender, attacks must target a defender. */
+  defenderGuards: true,
+  /** V2: ill-fated wears off at the end of its owner's turn (it lasts through one of their turns). */
+  illFatedFades: true,
+  /** V2 candidate: the second player draws 1 extra card in their opening hand. */
+  secondPlayerExtraCard: false,
+  /** V2 (comeback): a player who imagines no Entity at the start of their turn draws 2 instead of 1. */
+  emptyBoardDrawsTwo: true,
+  /** V2 candidate: when an Entity loses a fight, its owner loses 1 Essence (whether or not it's deleted). */
+  fightLossCostsEssence: false,
   /** HOUSE RULE (rulebook [to confirm]): a new Story must start with a Chapter 1 Entity. */
   storiesStartAtChapter1: true,
   /** HOUSE RULE (playtest-01): an Entity can't attack on the turn its Story was started. */
@@ -78,6 +96,10 @@ export interface PlayerState {
   memories: CardInst[]
   thoughts: CardInst[]
   stories: Story[]
+  /** V2: the Chant: Words in the order they were added */
+  chants: CardInst[]
+  /** last turn this player added a Word to their Chant (one per turn) */
+  chantedTurn: number
   discard: CardInst[]
 }
 
@@ -144,6 +166,7 @@ export interface GameState {
 export type Action =
   | { t: 'imagineNew'; uid: string }
   | { t: 'continue'; uid: string; storyId: string }
+  | { t: 'chant'; uid: string }
   | { t: 'toFight' }
   | { t: 'attack'; storyId: string; target: string | 'player' }
   | { t: 'chooseMode'; player: PlayerIdx; mode: FightMode }
@@ -225,6 +248,12 @@ export function bonusDetails(s: GameState, uid: string): { permanent: number; tu
   return { permanent: m.bonus, turn: m.turnBonus, continuous: fieldOf(s).get(uid)?.bonus ?? 0 }
 }
 
+/** V2: what traits add in a fight: brave +1 when attacking, charming +1 when defending. */
+export function roleBonus(s: GameState, uid: string, role: 'attacker' | 'defender'): number {
+  if (!RULES.braveCharming) return 0
+  return role === 'attacker' ? (hasTrait(s, uid, 'brave') ? 1 : 0) : hasTrait(s, uid, 'charming') ? 1 : 0
+}
+
 /** The Entity's sure hit, before bonuses. */
 export function sureOf(_s: GameState, c: CardInst): number {
   return card(c).sure
@@ -275,6 +304,27 @@ export function canAttack(s: GameState, story: Story): string | null {
   if (RULES.noAttackOnStartTurn && story.startedTurn === s.turn) return 'Its Story started this turn.'
   if (hasTrait(s, top(story).uid, 'pacifist')) return 'Pacifist Entities can’t attack.'
   return null
+}
+
+/** V2: can the player add this Word to their Chant now? An Echo N Word needs at least N − 1 Words already in it. */
+export function canChant(s: GameState, p: PlayerIdx, c: CardInst): string | null {
+  const k = card(c)
+  const pl = s.players[p]
+  if (k.type !== 'Word') return 'Not a Word.'
+  if (s.active !== p || s.phase !== 'main') return 'Add Words in your Main step.'
+  if (pl.chantedTurn === s.turn) return 'One Word per turn.'
+  if (pl.chants.length >= RULES.maxChants) return 'Your Chant is full.'
+  const need = (k.echo ?? 1) - 1
+  if (pl.chants.length < need) return `Echo ${k.echo} needs ${need} Word${need === 1 ? '' : 's'} in your Chant first.`
+  return null
+}
+
+/** V2: Entities the attacker may target: defenders first, if the opponent imagines any. */
+export function attackTargets(s: GameState, foe: PlayerIdx): Story[] {
+  const all = s.players[foe].stories
+  if (!RULES.defenderGuards) return all
+  const guards = all.filter((st) => hasTrait(s, top(st).uid, 'defender'))
+  return guards.length ? guards : all
 }
 
 export function canContinue(s: GameState, p: PlayerIdx, c: CardInst, story: Story): boolean {
@@ -344,6 +394,8 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
       memories: [],
       thoughts: [],
       stories: [],
+      chants: [],
+      chantedTurn: 0,
       discard: [],
     })) as unknown as [PlayerState, PlayerState],
     mods: {},
@@ -361,6 +413,7 @@ export function newGame(opts: { seed: number; decks: [string[], string[]]; names
     for (let i = 0; i < RULES.openingHand; i++) drawOne(s, p)
   }
   s.active = rand(s) < 0.5 ? 0 : 1
+  if (RULES.secondPlayerExtraCard) drawOne(s, other(s.active))
   log(s, `${s.players[s.active].name} goes first (and skips the first draw).`)
   return s
 }
@@ -430,6 +483,21 @@ function step(s: GameState, a: Action): boolean {
       enter(s, c, me)
       return true
     }
+    case 'chant': {
+      const c = pl.thoughts.find((x) => x.uid === a.uid)
+      if (!c || canChant(s, me, c)) return false
+      pl.thoughts = pl.thoughts.filter((x) => x.uid !== a.uid)
+      pl.chants.push(c)
+      pl.chantedTurn = s.turn
+      log(s, `${pl.name} adds ${card(c).name} (Echo ${card(c).echo ?? 1}) to their Chant.`)
+      enter(s, c, me)
+      if (RULES.phraseClears && pl.chants.length >= RULES.maxChants && s.winner === null) {
+        log(s, `${pl.name}'s Chant is complete: ${pl.chants.map((x) => card(x).name).join(', ')} are forgotten.`)
+        pl.discard.push(...pl.chants)
+        pl.chants = []
+      }
+      return true
+    }
     case 'toFight': {
       if (s.phase !== 'main') return false
       s.phase = 'fight'
@@ -448,7 +516,7 @@ function step(s: GameState, a: Action): boolean {
         loseEssence(s, foe)
         return true
       }
-      const target = s.players[foe].stories.find((st) => st.id === a.target)
+      const target = attackTargets(s, foe).find((st) => st.id === a.target)
       if (!target) return false
       story.attackedTurn = s.turn
       s.pendingFight = { attacker: { player: me, storyId: story.id }, defender: { player: foe, storyId: target.id }, modes: [null, null] }
@@ -480,10 +548,23 @@ function step(s: GameState, a: Action): boolean {
         m.turnBonus = 0
         m.traits = m.traits.filter((t) => !t.oneTurn && !(t.untilTurn !== undefined && t.untilTurn <= s.turn))
       }
+      if (RULES.illFatedFades) {
+        for (const st of pl.stories) {
+          const m = s.mods[top(st).uid]
+          if (m?.traits.some((t) => t.name === 'ill-fated')) {
+            m.traits = m.traits.filter((t) => t.name !== 'ill-fated')
+            log(s, `${card(top(st)).name} is no longer ill-fated.`)
+          }
+        }
+      }
       s.active = other(me)
       s.turn += 1
       s.phase = 'main'
       drawOne(s, s.active)
+      if (RULES.emptyBoardDrawsTwo && s.players[s.active].stories.length === 0) {
+        drawOne(s, s.active)
+        log(s, `${s.players[s.active].name} imagines no Entity: they draw 2.`)
+      }
       log(s, `— Turn ${s.turn}: ${s.players[s.active].name} —`)
       return true
     }
@@ -576,8 +657,8 @@ function findOnField(s: GameState, uid: string): CardInst | null {
   return null
 }
 
-function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode): FightSide {
-  const bonus = powerBonus(s, c.uid)
+function fightSide(s: GameState, player: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): FightSide {
+  const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
   if (mode === 'sure') {
     const base = sureOf(s, c)
     return { player, card: c, mode, base, bonus, flips: 0, flipped: [], total: base + bonus }
@@ -594,8 +675,8 @@ function resolveFight(s: GameState) {
   const f = s.pendingFight!
   const atkStory = findStory(s, f.attacker.storyId)!.story
   const defStory = findStory(s, f.defender.storyId)!.story
-  const attacker = fightSide(s, f.attacker.player, top(atkStory), f.modes[f.attacker.player]!)
-  const defender = fightSide(s, f.defender.player, top(defStory), f.modes[f.defender.player]!)
+  const attacker = fightSide(s, f.attacker.player, top(atkStory), f.modes[f.attacker.player]!, 'attacker')
+  const defender = fightSide(s, f.defender.player, top(defStory), f.modes[f.defender.player]!, 'defender')
   // HOUSE RULE (rulebook [open]): on a tie nothing happens.
   const outcome = attacker.total > defender.total ? 'attacker' : defender.total > attacker.total ? 'defender' : 'tie'
   s.pendingFight = null
@@ -605,6 +686,10 @@ function resolveFight(s: GameState) {
   const loser = outcome === 'attacker' ? defender : outcome === 'defender' ? attacker : null
   const deleted = loser ? destroy(s, loser.card.uid) : false
   if (!loser) log(s, 'Tie: both Entities survive.')
+  if (loser && RULES.fightLossCostsEssence && s.winner === null) {
+    log(s, `${s.players[loser.player].name} lost the fight: they lose 1 Essence.`)
+    loseEssence(s, loser.player)
+  }
   afterFight(s, [
     { c: attacker.card, owner: attacker.player, f: { role: 'attacker', foe: defender.card, won: outcome === 'attacker', deletedFoe: deleted && loser === defender } },
     { c: defender.card, owner: defender.player, f: { role: 'defender', foe: attacker.card, won: outcome === 'defender', deletedFoe: deleted && loser === attacker } },

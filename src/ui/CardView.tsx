@@ -1,5 +1,9 @@
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
+import { ICONS } from '../assets/icons/icons'
 import { cardName, type Card } from '../game/cards'
+
+/** Which art cards show: game-icons placeholders (default, same look for every card) or the Figma scans where they exist. */
+export const ArtContext = createContext<'icons' | 'figma'>('icons')
 
 /** Renders card text, turning [B]/[O] into the blue/orange diamonds used on the cards. */
 export function CardText({ text }: { text: string }) {
@@ -16,6 +20,28 @@ export function Stars({ n }: { n: number }) {
   return <span className="stars" title={`${n} Fate star${n === 1 ? '' : 's'}`}>{n === 0 ? '☆' : '★'.repeat(n)}</span>
 }
 
+const DOMAIN_GLYPH: Record<string, string> = { Music: '♪', Fate: '✦', Nature: '❦' }
+
+export function DomainGlyph({ domain }: { domain: string }) {
+  return <span className={`glyph g-${domain.toLowerCase()}`} title={domain}>{DOMAIN_GLYPH[domain] ?? '•'}</span>
+}
+
+export function Art({ card }: { card: Card }) {
+  const d = card.icon ? ICONS[card.icon] : undefined
+  return (
+    <div className="art">
+      {d ? (
+        <svg viewBox="0 0 512 512" aria-hidden="true"><path d={d} /></svg>
+      ) : (
+        <span className="art-letter">{card.name[0]}</span>
+      )}
+    </div>
+  )
+}
+
+/** Top-right number: Chapter for Entities, Echo for Words. */
+const cornerOf = (c: Card) => (c.type === 'Word' ? c.echo ?? 1 : c.type === 'Entity' ? c.chapter : null)
+
 interface Props {
   card: Card
   size?: 'xs' | 'sm' | 'md'
@@ -24,35 +50,44 @@ interface Props {
   onClick?: () => void
   badge?: ReactNode
   extra?: ReactNode
+  /** a short tile for the Chant (the row of Words) */
+  tile?: boolean
 }
 
-export function CardView({ card, size = 'md', selected, dim, onClick, badge, extra }: Props) {
+export function CardView({ card, size = 'md', selected, dim, onClick, badge, extra, tile }: Props) {
+  const art = useContext(ArtContext)
+  const scan = art === 'figma' && card.image && !tile
+  const corner = cornerOf(card)
+  const cls = `card ${size} ${tile ? 'tile' : ''} t-${card.type.toLowerCase()} dom-${card.domain.toLowerCase()} ${selected ? 'selected' : ''} ${dim ? 'dim' : ''} ${scan ? 'scan' : ''}`
   return (
-    <button
-      className={`card ${size} dom-${card.domain.toLowerCase()} ${selected ? 'selected' : ''} ${dim ? 'dim' : ''}`}
-      onClick={onClick}
-      title={cardName(card)}
-      type="button"
-    >
-      {card.image ? (
+    <button className={cls} onClick={onClick} title={cardName(card)} type="button">
+      {scan ? (
         <img src={card.image} alt="" draggable={false} />
       ) : (
-        <div className="card-face">
-          <div className="cf-name">{card.name}</div>
-          <div className="cf-text"><CardText text={card.text} /></div>
+        <div className="frame">
+          <div className="fr-top">
+            <DomainGlyph domain={card.domain} />
+            <span className="fr-name">{card.name}</span>
+            {corner !== null && <span className="fr-corner" title={card.type === 'Word' ? 'Echo' : 'Chapter'}>{corner}</span>}
+          </div>
+          <Art card={card} />
+          {size === 'md' && !tile && <div className="fr-text"><CardText text={card.text} /></div>}
+          <div className="fr-foot">
+            {card.type === 'Entity' ? (
+              <>
+                <span className="fate" title="Fate: cards flipped">⟲{card.fate}</span>
+                <span className="sure" title="Sure hit">{card.sure}</span>
+                <Stars n={card.stars} />
+              </>
+            ) : (
+              <>
+                {!tile && <span className="kind">{card.type === 'Word' ? `Echo ${card.echo ?? 1}` : card.type}</span>}
+                <Stars n={card.stars} />
+              </>
+            )}
+          </div>
         </div>
       )}
-      <div className="card-strip">
-        {card.type === 'Entity' ? (
-          <>
-            <span className="ch" title="Chapter">{card.chapter}</span>
-            <span title="Fate (cards flipped) · sure hit">F{card.fate}·{card.sure}</span>
-            <Stars n={card.stars} />
-          </>
-        ) : (
-          <span>{card.type}</span>
-        )}
-      </div>
       {badge && <div className="card-badge">{badge}</div>}
       {extra}
     </button>
@@ -70,13 +105,17 @@ export function CardBack({ count, label, onClick }: { count?: number; label?: st
 }
 
 export function CardDetails({ card }: { card: Card }) {
+  const art = useContext(ArtContext)
   return (
     <div className="details">
-      {card.image && <img className="details-img" src={card.image} alt={cardName(card)} />}
+      {art === 'figma' && card.image ? <img className="details-img" src={card.image} alt={cardName(card)} /> : (
+        <div className="details-img"><CardView card={card} size="md" /></div>
+      )}
       <h3>{cardName(card)}</h3>
       <div className="muted">
         {card.id} · {card.domain} {card.type}
         {card.type === 'Entity' && <> · Chapter {card.chapter}</>}
+        {card.type === 'Word' && <> · Echo {card.echo ?? 1}</>}
         {card.rarity && <> · {card.rarity}</>}
       </div>
       {card.type === 'Entity' && (
@@ -84,12 +123,18 @@ export function CardDetails({ card }: { card: Card }) {
           <span><b>Fate</b> {card.fate}</span>
           <span><b>Sure hit</b> {card.sure}</span>
           <span><b>Stars</b> <Stars n={card.stars} /></span>
-          {card.die && <span className="muted">printed: {card.die}</span>}
+        </div>
+      )}
+      {card.type === 'Word' && (
+        <div className="statline">
+          <span><b>Echo</b> {card.echo ?? 1}: needs {(card.echo ?? 1) - 1} Word{card.echo === 2 ? '' : 's'} already in your Chant</span>
+          <span><b>Stars</b> <Stars n={card.stars} /></span>
         </div>
       )}
       <p className="ctext"><CardText text={card.text} /></p>
       {card.flavor && <p className="flavor">“{card.flavor}”</p>}
       {card.placeholder && <p className="warn">Name is a placeholder in Figma.</p>}
+      {card.id.startsWith('SI-') && <p className="muted small">New card from the self-iteration rules (placeholder).</p>}
     </div>
   )
 }

@@ -6,7 +6,7 @@
 import { CARD_BY_ID, type Card } from './cards'
 import { whoMustAct, type BotPolicy } from './driver'
 import {
-  canActivate, canAttack, canContinue, canStart, flipsFor, powerBonus, reduce, sureOf, traitsOf, UNDELETABLE,
+  attackTargets, canActivate, canAttack, canChant, canContinue, canStart, flipsFor, powerBonus, reduce, roleBonus, sureOf, traitsOf, UNDELETABLE,
   type Action, type CardInst, type FightMode, type GameState, type PendingChoice, type PlayerIdx, type Story,
 } from './engine'
 
@@ -67,8 +67,8 @@ function flipDist(s: GameState, p: PlayerIdx, flips: number, bonus: number): Dis
   return out.size ? [...out] : [[bonus, 1]]
 }
 
-function sideDist(s: GameState, p: PlayerIdx, c: CardInst, mode: FightMode): Dist {
-  const bonus = powerBonus(s, c.uid)
+function sideDist(s: GameState, p: PlayerIdx, c: CardInst, mode: FightMode, role: 'attacker' | 'defender'): Dist {
+  const bonus = powerBonus(s, c.uid) + roleBonus(s, c.uid, role)
   return mode === 'sure' ? [[sureOf(s, c) + bonus, 1]] : flipDist(s, p, flipsFor(s, c), bonus)
 }
 
@@ -110,10 +110,10 @@ function attackEV(s: GameState, atk: { p: PlayerIdx; st: Story }, def: { p: Play
   const vD = storyValue(s, def.p, def.st)
   let best = { mode: 'sure' as FightMode, ev: -Infinity }
   for (const ma of MODES) {
-    const da = sideDist(s, atk.p, topOf(atk.st), ma)
+    const da = sideDist(s, atk.p, topOf(atk.st), ma, 'attacker')
     let worst = Infinity
     for (const md of MODES) {
-      const o = odds(da, sideDist(s, def.p, topOf(def.st), md))
+      const o = odds(da, sideDist(s, def.p, topOf(def.st), md, 'defender'))
       worst = Math.min(worst, o.win * vD - o.lose * vA)
     }
     if (worst > best.ev) best = { mode: ma, ev: worst }
@@ -133,7 +133,7 @@ function handValue(s: GameState, p: PlayerIdx, c: CardInst) {
   const pl = s.players[p]
   let v = k.type === 'Entity' ? Math.max(k.sure, k.fate * avgStars(s, p)) + k.chapter : 1
   if (k.type === 'Entity' && pl.stories.some((st) => cardOf(topOf(st)).chapter + 1 === k.chapter)) v += 4
-  if (k.type === 'Entity' && k.chapter === 1 && pl.stories.length < 5) v += 1
+  if (k.type === 'Entity' && k.chapter === 1 && pl.stories.length < 3) v += 1
   return v
 }
 
@@ -159,6 +159,8 @@ function smartPicks(s: GameState, ch: PendingChoice): string[] {
     return ranked.slice(0, Math.max(min, Math.min(max, good.length)))
   }
   const cards = [...s.players[p].memories, ...s.players[p].thoughts, ...s.players[p].discard]
+  // "put any on the bottom" (Read the Stars): keep stars on top for flips, send starless cards away
+  if (ch.effect === 'bottom') return ch.options.filter((uid) => { const c = cards.find((x) => x.uid === uid); return !!c && cardOf(c).stars === 0 })
   const val = (uid: string) => {
     const c = cards.find((x) => x.uid === uid)
     return c ? handValue(s, p, c) : 0
@@ -215,9 +217,10 @@ function turnActions(s: GameState, p: PlayerIdx): Action[] {
       if (canStart(s, p, c)) out.push({ t: 'imagineNew', uid: c.uid })
       for (const st of pl.stories) if (canContinue(s, p, c, st)) out.push({ t: 'continue', uid: c.uid, storyId: st.id })
     }
+    for (const c of pl.thoughts) if (!canChant(s, p, c)) out.push({ t: 'chant', uid: c.uid })
     out.push({ t: 'toFight' })
   } else {
-    const foeStories = s.players[foeOf(p)].stories
+    const foeStories = attackTargets(s, foeOf(p))
     for (const st of pl.stories) {
       if (!canAttack(s, st)) {
         out.push({ t: 'attack', storyId: st.id, target: 'player' })
@@ -234,7 +237,7 @@ function winChance(s: GameState, p: PlayerIdx, storyId: string, targetId: string
   const a = s.players[p].stories.find((st) => st.id === storyId)
   const d = s.players[foeOf(p)].stories.find((st) => st.id === targetId)
   if (!a || !d) return 0
-  return Math.max(...MODES.map((ma) => Math.min(...MODES.map((md) => odds(sideDist(s, p, topOf(a), ma), sideDist(s, foeOf(p), topOf(d), md)).win))))
+  return Math.max(...MODES.map((ma) => Math.min(...MODES.map((md) => odds(sideDist(s, p, topOf(a), ma, 'attacker'), sideDist(s, foeOf(p), topOf(d), md, 'defender')).win))))
 }
 
 function easyPolicy(s: GameState, p: PlayerIdx): Action | null {
@@ -271,6 +274,21 @@ function activationHelps(s: GameState, p: PlayerIdx, uid: string) {
   return ch.options.some((o) => (ownerOf(next, o) === p) !== harmful)
 }
 
+/** Words worth adding to the Chant now, highest Echo first; one that asks for targets needs a good one. */
+function goodChants(s: GameState, p: PlayerIdx): Action[] {
+  const out: { a: Action; v: number }[] = []
+  for (const c of s.players[p].thoughts) {
+    if (canChant(s, p, c)) continue
+    const a: Action = { t: 'chant', uid: c.uid }
+    const next = reduce(s, a)
+    if (next === s) continue
+    const ch = next.choices[0]
+    if (ch && ch.player === p && ch.zone === 'field' && !ch.options.some((o) => (ownerOf(next, o) === p) !== harmfulChoice(ch))) continue
+    out.push({ a, v: cardOf(c).echo ?? 1 })
+  }
+  return out.sort((x, y) => y.v - x.v).map((x) => x.a)
+}
+
 function bestContinue(s: GameState, p: PlayerIdx): Action[] {
   const pl = s.players[p]
   const avg = avgStars(s, p)
@@ -297,7 +315,7 @@ function bestStarts(s: GameState, p: PlayerIdx): Action[] {
 function goodAttacks(s: GameState, p: PlayerIdx): Action[] {
   const mine = s.players[p].stories.filter((st) => !canAttack(s, st))
   const foe = foeOf(p)
-  const theirs = s.players[foe].stories
+  const theirs = attackTargets(s, foe)
   if (!theirs.length) return mine.map((st) => ({ t: 'attack', storyId: st.id, target: 'player' }))
   const cands: { a: Action; v: number }[] = []
   for (const st of mine)
@@ -326,9 +344,9 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
         const vA = storyValue(s, f.attacker.player, aSt)
         const vD = storyValue(s, p, dSt)
         const am = attackEV(s, { p: f.attacker.player, st: aSt }, { p, st: dSt }).mode
-        const da = sideDist(s, f.attacker.player, topOf(aSt), am)
+        const da = sideDist(s, f.attacker.player, topOf(aSt), am, 'attacker')
         const score = (md: FightMode) => {
-          const o = odds(da, sideDist(s, p, topOf(dSt), md))
+          const o = odds(da, sideDist(s, p, topOf(dSt), md, 'defender'))
           return o.lose * vA - o.win * vD
         }
         yield { t: 'chooseMode', player: p, mode: score('flip') > score('sure') ? 'flip' : 'sure' }
@@ -344,6 +362,7 @@ function* normalCandidates(s: GameState, p: PlayerIdx): Generator<Action> {
     yield* bestContinue(s, p)
     yield* bestStarts(s, p)
     for (const uid of actives) if (!oneTurn(uid) && activationHelps(s, p, uid)) yield { t: 'activate', uid }
+    yield* goodChants(s, p)
     if (s.players[p].stories.some((st) => !canAttack({ ...s, phase: 'fight' }, st))) yield { t: 'toFight' }
   } else {
     const attacks = goodAttacks(s, p)

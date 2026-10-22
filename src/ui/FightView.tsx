@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { cardName } from '../game/cards'
 import {
-  card, findStory, flipsFor, powerBonus, sureOf, top,
+  card, findStory, flipsFor, powerBonus, roleBonus, sureOf, top,
   type Action, type FightResult, type FightSide, type GameState, type PlayerIdx,
 } from '../game/engine'
 import { CardView, Stars } from './CardView'
@@ -14,7 +14,7 @@ export function FightChoice({ s, player, act }: { s: GameState; player: PlayerId
   const atk = top(findStory(s, f.attacker.storyId)!.story)
   const def = top(findStory(s, f.defender.storyId)!.story)
   const mine = player === f.attacker.player ? atk : def
-  const bonus = powerBonus(s, mine.uid)
+  const bonus = powerBonus(s, mine.uid) + roleBonus(s, mine.uid, player === f.attacker.player ? 'attacker' : 'defender')
   return (
     <div className="overlay">
       <div className="dialog">

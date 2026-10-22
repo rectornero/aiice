@@ -109,7 +109,7 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
   const groups = new Map<string, string[]>()
   for (const id of sortCardIds([...counts.keys()])) {
     const c = CARD_BY_ID[id]
-    const g = !c ? 'Unknown cards' : c.type === 'Entity' ? `Chapter ${c.chapter}` : `${c.type}s (not playable yet)`
+    const g = !c ? 'Unknown cards' : c.type === 'Entity' ? `Chapter ${c.chapter}` : c.type === 'Word' ? 'Words' : `${c.type}s (not playable yet)`
     groups.set(g, [...(groups.get(g) ?? []), id])
   }
   const maxCh = Math.max(3, ...Object.keys(curve).map(Number))

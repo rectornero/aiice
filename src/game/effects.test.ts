@@ -124,14 +124,15 @@ describe('Music', () => {
     expect(canActivate(s, on(s, 'SOFA-003'))).toBe('No uses left this game.')
   })
 
-  it('Dreaming Violinist and Kazuki: no Words exist yet', () => {
-    let s = play(table({ hand: [['SOFA-004'], []], memories: [['SOFA-001'], []] }), 'SOFA-004')
-    expect(s.choices).toHaveLength(0)
-    expect(logged(s, 'finds no Music Word')).toBe(true)
+  it('Dreaming Violinist and Kazuki remember a Word of their Echo', () => {
+    let s = play(table({ hand: [['SOFA-004'], []], memories: [['SOFA-001', 'SI-C03', 'SI-C01'], []] }), 'SOFA-004')
+    expect(s.choices[0].options).toHaveLength(1)
+    s = choose(s, 0, s.choices[0].options)
+    expect(s.players[0].thoughts.map((c) => c.cardId)).toEqual(['SI-C01'])
     s = table({ field: [[['SOFA-025', 'SOFA-F03']], []], hand: [['SOFA-F04'], []] })
     s = cont(s, 'SOFA-F04', 'SOFA-F03')
     expect(s.choices).toHaveLength(0)
-    expect(logged(s, 'finds no Fate Word')).toBe(true)
+    expect(logged(s, 'finds no Fate Echo 2 Word')).toBe(true)
   })
 
   it('Blazing Melody: brave → 3 Entities [1 turn]', () => {

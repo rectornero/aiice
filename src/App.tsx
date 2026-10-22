@@ -7,6 +7,8 @@ import { DeckBuilder } from './ui/DeckBuilder'
 import { Game } from './ui/Game'
 import { Library } from './ui/Library'
 import { Lobby } from './ui/Lobby'
+import { ArtContext } from './ui/CardView'
+import { ICON_CREDITS } from './assets/icons/icons'
 
 type Screen =
   | { kind: 'menu' }
@@ -17,7 +19,30 @@ type Screen =
 
 type Level = 'easy' | 'normal'
 
+type Art = 'icons' | 'figma'
+const ART_KEY = 'ai-ice.si.art'
+function loadArt(): Art {
+  try {
+    return localStorage.getItem(ART_KEY) === 'figma' ? 'figma' : 'icons'
+  } catch {
+    return 'icons'
+  }
+}
+
 export function App() {
+  const [art, setArt] = useState<Art>(loadArt)
+  const pickArt = (a: Art) => {
+    setArt(a)
+    try { localStorage.setItem(ART_KEY, a) } catch { /* per-viewer convenience only */ }
+  }
+  return (
+    <ArtContext.Provider value={art}>
+      <Screens art={art} pickArt={pickArt} />
+    </ArtContext.Provider>
+  )
+}
+
+function Screens({ art, pickArt }: { art: Art; pickArt: (a: Art) => void }) {
   const [screen, setScreen] = useState<Screen>({ kind: 'menu' })
   const [names, setNames] = useState<[string, string]>(['Player 1', 'Player 2'])
   const [deckIds, setDeckIds] = useState<[string, string]>(['music', 'fate'])
@@ -54,7 +79,7 @@ export function App() {
   return (
     <div className="menu">
       <h1>AI·ICE</h1>
-      <p className="muted">Prototype table · rules draft v0.2 · first set SOFA</p>
+      <p className="muted">Prototype table · rules v2 · first set SOFA + new Words</p>
 
       <div className="panel">
         <h2>Play</h2>
@@ -82,17 +107,33 @@ export function App() {
       <div className="row gap wrap">
         <button className="btn" onClick={() => setScreen({ kind: 'decks' })}>Deck builder</button>
         <button className="btn" onClick={() => setScreen({ kind: 'library' })}>Card library</button>
+        <label className="row gap small muted">Art
+          <select value={art} onChange={(e) => pickArt(e.target.value as Art)}>
+            <option value="icons">Placeholder icons</option>
+            <option value="figma">Figma scans (where they exist)</option>
+          </select>
+        </label>
       </div>
 
       <details className="panel rules">
         <summary>How this table plays (rules used)</summary>
         <ul>
-          <li>5 Essence each, 5 cards in Thoughts, draw 1 per turn (the first player skips turn 1's draw).</li>
-          <li><b>Main:</b> imagine a Chapter 1 Entity to start a Story (max 5), or put the next Chapter on top of a Story. Each Story moves once per turn.</li>
-          <li><b>Fight:</b> each imagined Entity attacks once, not on the turn its Story started. Both players choose: <b>sure hit</b>, or <b>flip</b> Fate cards from Memories and count ★. Higher total wins; the loser is deleted and its Story falls back one Chapter. Ties: nothing happens.</li>
+          <li>5 Essence each, 5 cards in Thoughts, draw 1 per turn (the first player skips turn 1's draw). If you imagine no Entity at the start of your turn, draw 2.</li>
+          <li><b>Each player has two rows of 3 slots:</b> Stories (Entities) and your <b>Chant</b>, a row of green <b>Word</b> cards.</li>
+          <li><b>Main:</b> imagine a Chapter 1 Entity to start a Story (max 3), or put the next Chapter on top of a Story. Each Story moves once per turn.</li>
+          <li>Add one <b>Word</b> per turn to your Chant. Its top-right number is its <b>Echo</b>: Echo 2 needs 1 Word already in your Chant, Echo 3 needs 2. When the 3rd Word lands, the Chant is complete and all its Words are forgotten.</li>
+          <li><b>Fight:</b> each imagined Entity attacks once, not on the turn its Story started. Both players choose: <b>sure hit</b>, or <b>flip</b> Fate cards from Memories and count ★. Higher total wins; the loser is deleted. Ties: nothing happens.</li>
+          <li><b>Traits:</b> brave +1 when attacking · charming +1 when defending · defender must be attacked first · pacifist can't attack · fate-favored flips 1 more · ill-fated flips 1 fewer and wears off at the end of its owner's turn.</li>
           <li>If the opponent imagines no Entity, attack them directly: they lose 1 Essence. 0 Essence = you lose.</li>
-          <li>Card abilities play automatically: blue ◆ when the Entity enters, orange ◆ when you activate it, and “While imagined” effects all the time. If something looks wrong, the Adjust tools let you fix it by hand.</li>
-          <li>Fate, sure hit and ★ values are placeholders derived from the printed dice. Rules the rulebook leaves open are marked HOUSE RULE in the code.</li>
+          <li>Card art is a placeholder from game-icons.net (CC BY 3.0, credits in the repo). Fate, sure hit and ★ values are still provisional.</li>
+        </ul>
+      </details>
+
+      <details className="panel rules">
+        <summary>Art credits</summary>
+        <p className="small muted">Placeholder card art: icons from <a href="https://game-icons.net" target="_blank" rel="noreferrer">game-icons.net</a>, licensed <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a>, recoloured.</p>
+        <ul className="small">
+          {Object.entries(ICON_CREDITS).map(([author, icons]) => <li key={author}><b>{author}</b>: {icons.join(', ')}</li>)}
         </ul>
       </details>
     </div>

@@ -210,6 +210,17 @@ const CONTINUATIONS: Record<string, (s: GameState, ch: PendingChoice, picks: str
     shuffle(s, pl.memories)
     log(s, `${ch.data?.src}: ${pl.name} remembers ${cardName(card(c))}.`)
   },
+  bottom: (s, ch, picks) => {
+    const pl = s.players[ch.player]
+    const moved = pl.memories.filter((c) => picks.includes(c.uid))
+    pl.memories = [...pl.memories.filter((c) => !picks.includes(c.uid)), ...moved]
+    log(s, `${ch.data?.src}: ${pl.name} puts ${moved.length} card${moved.length === 1 ? '' : 's'} on the bottom of their Memories.`)
+    if (ch.data?.draw) {
+      const c = pl.memories.shift()
+      if (c) pl.thoughts.push(c)
+      log(s, `${ch.data?.src}: ${pl.name} draws 1.`)
+    }
+  },
   hiroshi: (s, ch, picks) => {
     const pl = s.players[ch.player]
     const c = pl.thoughts.find((x) => x.uid === picks[0])
@@ -240,7 +251,7 @@ export function computeField(s: GameState): Map<string, FieldEntity> {
 // ---------- cards ----------
 
 const isMusic = (e: { k: Card }) => e.k.domain === 'Music'
-const word = (domain: string) => (k: Card) => k.type === 'Word' && k.domain === domain
+const chantOf = (domain: string, echo?: number) => (k: Card) => k.type === 'Word' && k.domain === domain && (echo === undefined || k.echo === echo)
 
 /** Layer 2 order: Aqua Serenade's fate-favored must exist before Hikari reads it. */
 const GRANT_ORDER = ['SOFA-M04', 'SOFA-096', 'SOFA-028']
@@ -263,8 +274,8 @@ export const EFFECTS: Record<string, Effect> = {
     onActivate: (s, self, owner) =>
       traitTo(s, self, owner, imagined(s).filter((e) => card(e.c).domain === 'Music').map((e) => e.c.uid), 1, false, 'resonant', {}, ['Music Entity', 'Music Entities']),
   },
-  // Dreaming Violinist — [B]: Remember 1 Word [Domain: Music, Echo: 1] (no Words in the set yet; Echo is not checked)
-  'SOFA-004': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music Word', word('Music')) },
+  // Dreaming Violinist — [B]: Remember 1 Word [Domain: Music, Echo: 1]
+  'SOFA-004': { onEnter: (s, self, owner) => remember(s, self, owner, 'Music Echo 1 Word', chantOf('Music', 1)) },
   // Blazing Melody — [O]: {1} brave → 3 Entities [1 turn]
   'SOFA-005': {
     onActivate: (s, self, owner) => traitTo(s, self, owner, imagined(s).map((e) => e.c.uid), 3, false, 'brave', { oneTurn: true }, ['Entity', 'Entities']),
@@ -420,5 +431,64 @@ export const EFFECTS: Record<string, Effect> = {
     },
   },
   // Kazuki Amagiri — When instanced: Remember 1 Word [Domain: Fate, Echo: 2]
-  'SOFA-F04': { onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Word', word('Fate')) },
+  'SOFA-F04': { onEnter: (s, self, owner) => remember(s, self, owner, 'Fate Echo 2 Word', chantOf('Fate', 2)) },
+
+  // ---------- V2 Words (green). [B] triggers when the Word joins your Chant. ----------
+  // Tuning Hum — resonant → ~2 your Entities [Domain: Music]
+  'SI-C01': {
+    onEnter: (s, self, owner) =>
+      traitTo(s, self, owner, imagined(s, owner).filter((e) => card(e.c).domain === 'Music').map((e) => e.c.uid), 2, true, 'resonant', {}, ['of your Music Entities', 'of your Music Entities']),
+  },
+  // Lullaby — pacifist → 1 opponent's Entity [until the end of their next turn]
+  'SI-C02': {
+    onEnter: (s, self, owner) =>
+      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, false, 'pacifist', { untilTurn: s.turn + 1 }, ["opponent's Entity", "opponent's Entities"]),
+  },
+  // Rising Chorus — brave → ~3 your Entities [1 turn]. Your resonant Entities get +1.
+  'SI-C03': {
+    onEnter: (s, self, owner) => {
+      log(s, 'Rising Chorus: your resonant Entities get +1.')
+      for (const e of imagined(s, owner)) if (hasTrait(s, e.c.uid, 'resonant')) addBonus(s, e.c.uid, 1)
+      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 3, true, 'brave', { oneTurn: true }, ['of your Entities', 'of your Entities'])
+    },
+  },
+  // Grand Finale — your Entities get +2 [1 turn]. Remember 1 Entity [Domain: Music].
+  'SI-C04': {
+    onEnter: (s, self, owner) => {
+      log(s, 'Grand Finale: your Entities get +2 this turn.')
+      for (const e of imagined(s, owner)) addBonus(s, e.c.uid, 2, true)
+      remember(s, self, owner, 'Music Entity', (k) => k.type === 'Entity' && k.domain === 'Music')
+    },
+  },
+  // Read the Stars — look at the top 3 cards of your Memories; put any of them on the bottom.
+  'SI-C05': {
+    onEnter: (s, self, owner) => {
+      const options = s.players[owner].memories.slice(0, 3).map((c) => c.uid)
+      ask(s, { player: owner, sourceUid: self.uid, zone: 'memories', options, min: 0, max: options.length, effect: 'bottom', data: { src: nm(self), draw: true },
+        prompt: 'Read the Stars: these are the top 3 cards of your Memories (the next ones you flip or draw). Choose any to put on the bottom, then draw 1.' },
+      'Read the Stars: your Memories are empty.')
+    },
+  },
+  // Twist of Fate — fate-favored → 1 your Entity. ill-fated → ~1 opponent's Entity.
+  'SI-C06': {
+    onEnter: (s, self, owner) => {
+      traitTo(s, self, owner, imagined(s, owner).map((e) => e.c.uid), 1, false, 'fate-favored', {}, ['of your Entities', 'of your Entities'])
+      traitTo(s, self, owner, imagined(s, other(owner)).map((e) => e.c.uid), 1, true, 'ill-fated', {}, ["opponent's Entity", "opponent's Entities"])
+    },
+  },
+  // Starfall — flip 3. Your opponent loses 1 Essence for every 2 stars you flipped.
+  'SI-C07': {
+    onEnter: (s, _self, owner) => {
+      const pl = s.players[owner]
+      const flipped = pl.memories.splice(0, 3)
+      pl.memories.push(...flipped)
+      const stars = flipped.reduce((n, c) => n + card(c).stars, 0)
+      log(s, `Starfall: ${pl.name} flips ${flipped.map((c) => `${card(c).name} (${card(c).stars}★)`).join(', ') || 'nothing'}: ${stars} star${stars === 1 ? '' : 's'}.`)
+      const n = Math.floor(stars / 2)
+      if (n) {
+        log(s, `Starfall: ${s.players[other(owner)].name} loses ${n} Essence.`)
+        loseEssence(s, other(owner), n)
+      } else log(s, 'Starfall: not enough stars.')
+    },
+  },
 }

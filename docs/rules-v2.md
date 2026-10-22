@@ -1,6 +1,6 @@
-# AI-ICE — Rules v2 (self-iteration, experimental)
+# AI-ICE — Rules v2
 
-> Approved by Nero on 2026-10-22. Evolved from rulebook draft v0.2, evolved without Q&A and tested with the bot simulator. Nothing here replaces the main rulebook ([../rules/rulebook.md](project files: ai-ice/rules/rulebook.md)); treat it as a proposal to react to. Principle kept: simple mechanics, randomness from the cards (flips and ★), no dice or extra pieces.
+> Approved by Nero on 2026-10-22. Evolved from rulebook draft v0.2 (project files: ai-ice/rules/rulebook.md) and tested with the bot simulator. Principle kept: simple mechanics, randomness from the cards (flips and ★), no dice or extra pieces.
 
 ## What changed from v0.2, and why
 | Change | Rule | Why |

@@ -76,8 +76,9 @@ func _run() -> void:
 			if f.s.pendingFight != null and not kinds.has("choose-mode"):
 				kinds["choose-mode"] = true
 				await _shot("choose-mode")
-			if steps == 12:
-				f.sel = f.s.players[0].thoughts[0].uid if f.s.players[0].thoughts.size() else ""
+			if not kinds.has("detail-panel") and f.my_turn() and f.s.players[0].thoughts.size():
+				kinds["detail-panel"] = true
+				f.sel = f.s.players[0].thoughts[0].uid
 				f.refresh()
 				await _shot("detail-panel")
 			var a = Bot.act(f.s, 0, "normal")

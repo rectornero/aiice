@@ -445,7 +445,7 @@ func _draw_panel() -> void:
 		body += "Flip mark: %s\n" % ", ".join(marks)
 	body += k.text
 	var acts = actions_for(sel) if f.player == ME else []
-	var bh = 20 * acts.size()
+	var bh = 22 * acts.size()
 	var t = RichTextLabel.new()
 	t.bbcode_enabled = true
 	t.position = Vector2(6, 110)
@@ -456,9 +456,9 @@ func _draw_panel() -> void:
 	for i in acts.size():
 		var a = acts[i][1]
 		var b = UI.button(acts[i][0], func(): dispatch(a), 9)
-		b.position = Vector2(6, 356 - bh + i * 20)
-		b.size = Vector2(w - 12, 18)
 		b.clip_text = true
+		b.position = Vector2(6, 354 - bh + i * 22)
+		b.size = Vector2(w - 12, 18)
 		panel.add_child(b)
 
 

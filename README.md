@@ -9,6 +9,7 @@ Web app to play AI-ICE, the trading card game. React + TypeScript (Vite).
 - `src/game/decks.ts` — deck storage (browser localStorage), deck rules (HOUSE RULE), share codes.
 - `src/net/` — online matches (host-authoritative protocol in the browsers). Messages go through a small relay: `netlify/functions/relay.mts` + Netlify Database (`netlify/database/migrations/`). Netlify provisions the database and applies migrations on deploy; `netlify dev` runs it locally.
 - `src/ui/` — the table (vs bot, hot-seat, online), deck builder, library, lobby.
+- `story-game/` — single-player story game in Godot 4 (retro top-down city, AI-ICE as the fights), with the rules ported to GDScript. See `story-game/README.md`.
 
 ```sh
 npm install

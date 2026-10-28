@@ -28,3 +28,10 @@ This studio tracks its work in Artache. The `artache` MCP tools talk to it.
   stable `key` like "rectornero/aiice:play-app" or "rectornero/aiice:rulebook", so later changes update the
   same item.
 - Never put an Artache token (`art_…`) in this repo, a `.mcp.json` or a commit.
+
+### Artache: this project
+Artache project name: `rectornero/aiice` (use exactly this as `project`).
+Important here: rules version changes; balance sim results (matches run, win split, cards changed); card set progress (cards done/total for SOFA-SD1 and later sets); play app deploys on Netlify (ai-ice site); pack-opening and collection features; packaging or key-art versions; Godot story game milestones.
+Check before posting a design: the Artache Statement of Conduct (no timed mechanics, no paid chance, everything reachable). If something breaks it, post it as a `question`.
+Lore wording: fights are for discovery (raise the rival's Essence), not violence.
+At the end of each session, ask: did anything here change what Nero would decide or plan? Post only if yes.

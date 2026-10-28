@@ -28,3 +28,20 @@ This studio tracks its work in Artache. The `artache` MCP tools talk to it.
   stable `key` like "rectornero/aiice:play-app" or "rectornero/aiice:rulebook", so later changes update the
   same item.
 - Never put an Artache token (`art_…`) in this repo, a `.mcp.json` or a commit.
+
+## Netlify credits
+All of Nero's sites share one Netlify credit balance (team "overgame-director", 1,000 credits a month on the
+Personal plan). When it hits zero, every site is paused. Prices: production deploy 15 credits; compute and
+database compute 10 per GB-hour; bandwidth 20 per GB; web requests 2 per 10,000; AI Gateway 180 per USD.
+Deploy Previews and branch deploys are free. The database suspends after about 5 idle minutes; anything that
+keeps waking it costs credits around the clock.
+- No scheduled job or polling loop touches the database on every run. Gate it on a cheap check, such as a
+  Blobs note of when there is next work, or use delayed or event-driven scheduling instead of polling.
+- Client polling is never faster than 60 seconds.
+- No Netlify AI Gateway unless Nero approves it.
+- Test on branches (free). Batch changes into as few production deploys as possible (every push or merge to
+  `main` is a production deploy), and ask Nero before deploying while credits are low.
+- Before adding any schedule, polling or production deploy, estimate its monthly credits and say the number.
+- Known exception under review: the online relay (`src/net/transport.ts`) polls `/api/relay` every second
+  during a match. Nero is deciding how it should live with the 60-second rule; don't make it faster or add
+  new callers.

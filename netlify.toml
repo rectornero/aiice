@@ -1,6 +1,9 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  # Netlify credits: a production deploy costs 15 credits from the balance all of Nero's sites share.
+  # Production only builds when the commit message carries [release]; Deploy Previews (free) always build.
+  ignore = 'if [ "${CONTEXT:-production}" = production ]; then ! git log -1 --format=%B | grep -qF "[release]"; else exit 1; fi'
 
 [functions]
   node_bundler = "esbuild"

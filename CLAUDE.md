@@ -35,3 +35,10 @@ Important here: rules version changes; balance sim results (matches run, win spl
 Check before posting a design: the Artache Statement of Conduct (no timed mechanics, no paid chance, everything reachable). If something breaks it, post it as a `question`.
 Lore wording: fights are for discovery (raise the rival's Essence), not violence.
 At the end of each session, ask: did anything here change what Nero would decide or plan? Post only if yes.
+
+## Netlify deploys (credits)
+
+Production deploys cost 15 credits each from the Netlify balance shared by all of Nero's sites. `netlify.toml`
+skips a production build unless the commit message (or the squash-merge title/body) contains `[release]`;
+Deploy Previews still build for free. Batch work into one release, ask Nero before shipping when credits are
+low, and say the credit cost (15 per release) when proposing one.
